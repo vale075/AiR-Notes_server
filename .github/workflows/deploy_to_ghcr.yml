@@ -123,7 +123,5 @@ jobs:
       - name: Delete untagged images older than 7 days
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          package: ${{ github.event.repository.name }}
           delete-untagged: true
           older-than: 10 days
