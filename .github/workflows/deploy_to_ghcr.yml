@@ -128,6 +128,6 @@ jobs:
       - name: Delete untagged images older than 10 days
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: ${{ steps.string.outputs.repo_lower }}
+          package: ${{ steps.string.outputs.repo_lower }}
           delete-untagged: true
           older-than: 10 days
