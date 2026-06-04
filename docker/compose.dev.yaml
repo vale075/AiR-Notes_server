@@ -18,7 +18,7 @@ services:
     stdin_open: true
 
   db:
-    image: mariadb:12.2
+    image: mariadb:12.3
     container_name: AiR_Notes_server_dev_mariadb
     environment:
       MYSQL_ROOT_PASSWORD: mysql
