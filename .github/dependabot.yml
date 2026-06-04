@@ -1,0 +1,55 @@
+# It allows to keep dependencies up to date using Dependabot.
+#
+# You can find more info about the file-format here:
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "Django"
+        versions:
+          - ">=6.0.0"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions-deps:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/docker/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-deps:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/docker/"
+    schedule:
+      interval: "weekly"
+    groups:
+      compose-deps:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      devcontainer-deps:
+        patterns:
+          - "*"

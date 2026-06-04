@@ -1,0 +1,39 @@
+# used by .devcontainer
+volumes:
+  AiR_Notes_server_dev_mariadb_data: {}
+
+services:
+  django:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.dev
+    container_name: AiR_Notes_server_dev_django
+    volumes:
+      - ../:/app/
+    # ports:
+    #   - "8080:8080"
+    depends_on:
+      - db
+    tty: true
+    stdin_open: true
+
+  db:
+    image: mariadb:12.2
+    container_name: AiR_Notes_server_dev_mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
+      MYSQL_DATABASE: AiR_Notes_server
+    volumes:
+      - AiR_Notes_server_dev_mariadb_data:/var/lib/mysql
+
+  # For dev, GUI to interact directly with DB
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: AiR_Notes_server_dev_phpmyadmin
+    # ports:
+    #   - 8080:80
+    environment:
+      - PMA_HOST=db
+      - PMA_PORT=3306
+      - PMA_USER=root
+      - PMA_PASSWORD=mysql

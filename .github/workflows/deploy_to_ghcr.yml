@@ -1,0 +1,129 @@
+name: Deploy to GHCR
+
+on:
+  workflow_dispatch:
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Determine the "True" SHA (Head SHA for PRs, github.sha for others)
+      - name: Set consistent SHA
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Read Python and Node versions
+        id: extract_versions
+        run: |
+          # Read file, trim whitespace/newlines, and set as output
+          PYTHON_VERSION=$(cat .python-version | xargs)
+          NODE_VERSION=$(cat .nvmrc | xargs)
+          echo "python_version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
+
+      # Set up BuildKit Docker container builder to be able to build
+      # multi-platform images and export cache
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Login against a Docker registry
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=dev,enable=${{ github.event_name == 'pull_request' }}
+            type=raw,value=prod,enable=${{ github.ref == 'refs/heads/prod' }}
+            type=raw,value=sha-${{ steps.vars.outputs.sha }},enable=true
+
+      - name: Check if image exists
+        id: check_image
+        run: |
+          # Use the lowercase name and the consistent SHA
+          LOWER_IMAGE=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="${LOWER_IMAGE}:sha-${{ steps.vars.outputs.sha }}"
+
+          if docker manifest inspect $IMAGE_TAG > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Found existing image: $IMAGE_TAG"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ No image found for $IMAGE_TAG"
+          fi
+
+      # If it exists, just create the new tags (retagging)
+      - name: Retag existing image
+        if: steps.check_image.outputs.exists == 'true'
+        run: |
+          LOWER_IMAGE=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          TAG_ARGS=$(echo "${{ steps.meta.outputs.tags }}" | xargs -I {} echo "--tag {}")
+
+          docker buildx imagetools create $TAG_ARGS ${LOWER_IMAGE}:sha-${{ steps.vars.outputs.sha }}
+
+      # Build and push Docker image with Buildx
+      # https://github.com/docker/build-push-action
+      - name: Build and push Docker image
+        if: steps.check_image.outputs.exists != 'true'
+        id: build-and-push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            COMMIT_SHA=${{ steps.vars.outputs.sha }}
+            PYTHON_VERSION=${{ steps.extract_versions.outputs.python_version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  cleanup-registry:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+    needs: build
+    steps:
+      - name: Delete untagged images older than 7 days
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: ${{ github.event.repository.name }}
+          delete-untagged: true
+          older-than: 10 days

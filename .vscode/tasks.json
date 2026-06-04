@@ -1,0 +1,59 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Launch webserver",
+            "icon": {
+                "id": "play",
+                "color": "terminal.ansiGreen"
+            },
+            "type": "shell",
+            "command": "uv run manage.py runserver",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            },
+        },
+        {
+            "label": "Lint/format all",
+            "icon": {
+                "id": "pass",
+                "color": "terminal.ansiBlue"
+            },
+            "type": "shell",
+            "command": "uv run prek run --all-files",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            },
+        },
+        {
+            "label": "Make migrations",
+            "type": "shell",
+            "command": "uv run manage.py makemigrations",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            },
+        },
+        {
+            "label": "Migrate",
+            "type": "shell",
+            "command": "uv run manage.py migrate",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            },
+        },
+    ]
+}

@@ -1,0 +1,64 @@
+// For format details, see https://containers.dev/implementors/json_reference/
+{
+  "name": "AiR_Notes_server Dev",
+  "dockerComposeFile": [
+    "../docker/compose.dev.yaml"
+  ],
+  "service": "django",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "actboy168.tasks",
+        // python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        // django
+        "batisteo.vscode-django",
+        "monosans.djlint"
+      ],
+      "settings": {
+        "remote.autoForwardPortsFallback": 0,
+        "editor.formatOnSave": true,
+        "editor.rulers": [
+          100,
+          120
+        ],
+        "[python]": {
+          "analysis.autoImportCompletions": true,
+          "analysis.typeCheckingMode": "basic",
+          "defaultInterpreterPath": "/app/.venv/bin/python",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "always"
+          },
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "languageServer": "Pylance",
+          "linting.enabled": true,
+          "linting.mypyEnabled": true,
+          "linting.mypyPath": "/app/.venv/bin/mypy"
+        },
+        "[html][django-html][handlebars][hbs][mustache][jinja][jinja-html][nj][njk][nunjucks][twig]": {
+          "editor.defaultFormatter": "monosans.djlint"
+        }
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "workspaceFolder": "/app",
+  // Those commands setup the dev env.
+  "postCreateCommand": "cp -u .env.dist .env && uv sync && uv run prek install -f && uv run manage.py migrate && uv run manage.py createcachetable && uv run prek install-hooks",
+  "forwardPorts": [
+    8000,
+    "mailpit:8025",
+    "phpmyadmin:80"
+  ],
+  "portsAttributes": {
+    "80": {
+      "label": "PhpMyAdmin db navigator"
+    },
+    "8000": {
+      "label": "Django webserver",
+      "onAutoForward": "openBrowserOnce"
+    }
+  }
+}
