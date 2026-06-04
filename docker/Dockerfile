@@ -3,7 +3,7 @@ ARG APP_HOME=/app
 # wether to include dev dependencies
 ARG MINIMAL=1
 
-# Stage 1: Python and tailwind build stage
+# Stage 1: Python build stage
 FROM ghcr.io/astral-sh/uv:0.10-python${PYTHON_VERSION}-trixie AS builder
 
 ARG APP_HOME
@@ -31,12 +31,7 @@ ENV PATH="${APP_HOME}/.venv/bin:$PATH"
 # Copy application code
 COPY . .
 
-# Install and build tailwind
-RUN python manage.py tailwind install --no-package-lock
-RUN python manage.py tailwind build
-
-# Remove development files that are not needed anymore to save space
-RUN rm -rf theme/static_src
+# Use to be django-tailwin install here
 
 # Stage 2: Production stage
 FROM python:${PYTHON_VERSION}-slim-trixie
