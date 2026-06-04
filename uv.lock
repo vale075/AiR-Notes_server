@@ -44,7 +44,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "django-browser-reload", specifier = ">=1.21.0" },
-    { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=5.2.9" },
+    { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=6.0.5" },
     { name = "django-watchfiles", specifier = ">=1.4.0" },
     { name = "djlint", specifier = ">=1.36.4" },
     { name = "honcho", specifier = ">=2.0.0" },
