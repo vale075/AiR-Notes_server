@@ -76,7 +76,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
-    "ninja_simple_jwt",
     "users",
     "notes",
 ]
