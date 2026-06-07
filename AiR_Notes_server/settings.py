@@ -24,31 +24,33 @@ BASE_DIR = Path(__file__).parent.parent
 # Take environment variables from .env file
 environ.Env.read_env(BASE_DIR / ".env")
 
-DEBUG = env("DEBUG", bool, default=False)
+DEBUG = env.bool("DEBUG", default=False)
 
 DELIVERY_CUTOFF_TIME = time(6, 30)
 
-GIT_COMMIT = env("GIT_COMMIT_SHA", default="na")[:7]
+GIT_COMMIT = env.str("GIT_COMMIT_SHA", default="na")[:7]
 
-PROD = env("PROD", default=False)
+PROD = env.bool("PROD", default=False)
 
-SECRET_KEY = env(
+SECRET_KEY = env.str(
     "DJANGO_SECRET_KEY",
     default="django-insecure-=5sf8@fhdxzr8(c!%-5xx1!5x6x07$%vc^0rr&$4ljgh&v5!w%",
 )
 
-MINIMAL = env(
-    "MINIMAL", bool, default=True
+MINIMAL = env.bool(
+    "MINIMAL", default=True
 )  # Wether only minimal dependencies for prod were included
 
-ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS", list, ["AiR_Notes_server.valegreg.com"])
+ALLOWED_HOSTS = env.list(
+    "DJANGO_ALLOWED_HOSTS", default=["AiR_Notes_server.valegreg.com"]
+)
 
-CSRF_TRUSTED_ORIGINS = env(
-    "DJANGO_CSRF_TRUSTED_ORIGINS", list, ["https://AiR_Notes_server.valegreg.com"]
+CSRF_TRUSTED_ORIGINS = env.list(
+    "DJANGO_CSRF_TRUSTED_ORIGINS", default=["https://AiR_Notes_server.valegreg.com"]
 )
 
 # HTTPS Enforcing
-if env("ENFORCE_HTTPS", bool, default=True):
+if env.bool("ENFORCE_HTTPS", default=True):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -74,6 +76,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
+    "ninja_simple_jwt",
+    "users",
     "notes",
 ]
 
@@ -126,11 +130,11 @@ WSGI_APPLICATION = "AiR_Notes_server.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": env("DATABASE_NAME", default="AiR_Notes_server"),
-        "HOST": env("DATABASE_HOST", default=""),
-        "PORT": env("DATABASE_PORT", default="3306"),
-        "USER": env("DATABASE_USERNAME", default="AiR_Notes_server"),
-        "PASSWORD": env("DATABASE_PASSWORD", default=""),
+        "NAME": env.str("DATABASE_NAME", default="AiR_Notes_server"),
+        "HOST": env.str("DATABASE_HOST", default=""),
+        "PORT": env.str("DATABASE_PORT", default="3306"),
+        "USER": env.str("DATABASE_USERNAME", default="AiR_Notes_server"),
+        "PASSWORD": env.str("DATABASE_PASSWORD", default=""),
         "OPTIONS": {
             "init_command": "SET foreign_key_checks = 0;",
         },
