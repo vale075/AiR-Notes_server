@@ -18,10 +18,21 @@ Including another URLconf
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
+from django.utils.html import format_html
+from django.views.generic.base import RedirectView
 
 from .api import api
 
+admin.site.site_header = "AiR Notes Administration"
+admin.site.site_title = "AiR Notes Admin Portal"
+
+# This changes the sub-title on the main admin dashboard page
+admin.site.index_title = format_html(
+    'Bienvenue sur le panneau de contrôle. 🚀 <a href="/api/docs" target="_blank" style="margin-left: 15px; text-decoration: underline; color: #79aec8;">Voir la doc API</a>'
+)
+
 urlpatterns = [
+    path("", RedirectView.as_view(url="admin/", permanent=False)),
     path("admin/", admin.site.urls),
     path("api/", api.urls),
 ]
