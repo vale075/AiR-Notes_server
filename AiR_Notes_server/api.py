@@ -1,7 +1,5 @@
-from datetime import datetime
-
 from django.contrib.auth import authenticate
-from ninja import NinjaAPI, Schema
+from ninja import ModelSchema, NinjaAPI
 from ninja.security import HttpBearer
 from ninja.throttling import AnonRateThrottle, AuthRateThrottle
 
@@ -39,9 +37,10 @@ api = NinjaAPI(
 )
 
 
-class AuthenticateResponseSchema(Schema):
-    key: str
-    expires_at: datetime
+class AuthenticateResponseSchema(ModelSchema):
+    class Meta:
+        model = Token
+        fields = ["key", "expires_at", "user"]
 
 
 @api.post(
