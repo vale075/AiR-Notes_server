@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
+    "ninja",
     "users",
     "notes",
 ]
@@ -237,7 +238,7 @@ STORAGES = {
     },
 }
 
-# Used to cache oAuth token from HelloAsso API
+# Used to cache qrcode images
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",

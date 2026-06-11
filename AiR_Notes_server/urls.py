@@ -28,13 +28,16 @@ admin.site.site_title = "AiR Notes Admin Portal"
 
 # This changes the sub-title on the main admin dashboard page
 admin.site.index_title = format_html(
-    'Bienvenue sur le panneau de contrôle. 🚀 <a href="/api/docs" target="_blank" style="margin-left: 15px; text-decoration: underline; color: #79aec8;">Voir la doc API</a>'
+    "Bienvenue sur le panneau de contrôle. 🚀 "
+    '<a href="/api/docs" target="_blank" style="margin-left: 15px; text-decoration: underline; color: #79aec8;">Voir '
+    "la doc API</a>"
 )
 
 urlpatterns = [
     path("", RedirectView.as_view(url="admin/", permanent=False)),
     path("admin/", admin.site.urls),
     path("api/", api.urls),
+    path("", include("notes.urls")),
 ]
 
 if settings.DEBUG and not settings.MINIMAL:

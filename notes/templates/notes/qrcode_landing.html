@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opening App...</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        background-color: #f9fafb;
+        color: #1f2937;
+        text-align: center;
+      }
+
+      .container {
+        max-width: 400px;
+        padding: 20px;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3b82f6;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .btn {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 10px 20px;
+        background-color: #3b82f6;
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="spinner"></div>
+      <h2>Opening your AR Note...</h2>
+      <p>We are redirecting you to the app. If nothing happens, you can download the app or try the link below.</p>
+      <!-- Fallback button in case automatic redirection is blocked by the browser -->
+      <a id="fallback-button" href="#" class="btn">Download App</a>
+    </div>
+    <script>
+      // --- CONFIGURATION ---
+      // Replace 'myapp' with your mobile app's custom URL scheme (defined in AndroidManifest.xml)
+      const appCustomUri = "myapp://qrcode/{{ qr_id }}";
+
+      // Replace with your actual Google Play Store URL or package name
+      const playStoreUrl = "https://play.google.com/store/apps/details?id=com.yourcompany.yourapp";
+
+      // Set the fallback button link just in case
+      document.getElementById('fallback-button').href = playStoreUrl;
+
+      // --- REDIRECTION LOGIC ---
+      // 1. Try to open the mobile app instantly using the custom URI scheme
+      window.location.href = appCustomUri;
+
+      // 2. Set a fallback timer. If the app opens, this tab loses focus or suspends.
+      // If the app isn't installed, the browser stays here, the timer fires, and sends them to the store.
+      const start = Date.now();
+      setTimeout(function() {
+        // Optimization: If the user explicitly swiped away or the app opened,
+        // the elapsed time will feel longer because the browser tab paused.
+        // If they are still actively waiting on this page, run the redirect.
+        if (Date.now() - start < 2000) {
+          window.location.href = playStoreUrl;
+        }
+      }, 1500); // 1.5 second buffer
+    </script>
+  </body>
+</html>

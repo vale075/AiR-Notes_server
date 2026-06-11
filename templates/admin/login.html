@@ -1,11 +1,14 @@
 {% extends "admin/login.html" %}
+
 {% block content %}
-    {{ block.super }}
-    <div style="text-align: center; margin-top: 20px;">
-        <a href="/api/docs"
-           target="_blank"
-           style="color: #79aec8;
-                  text-decoration: underline;
-                  font-size: 14px">🚀 Accéder à la documentation API</a>
-    </div>
+  {{ block.super }}
+  <div style="text-align: center; margin-top: 20px;">
+    <!-- djlint:off D018-->
+    <a href="/api/docs"
+       target="_blank"
+       style="color: #79aec8;
+              text-decoration: underline;
+              font-size: 14px">🚀 Accéder à la documentation API</a>
+    <!-- djlint:on -->
+  </div>
 {% endblock content %}

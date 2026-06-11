@@ -14,6 +14,9 @@ class Token(models.Model):
 
     expires_at = models.DateTimeField()
 
+    def __str__(self):
+        return f"Token for {self.user.username}"
+
     def save(self, *args, **kwargs):
         if not self.key:
             self.key = secrets.token_hex(20)  # Generates a 40-character string
@@ -25,6 +28,3 @@ class Token(models.Model):
     @property
     def is_expired(self):
         return timezone.now() > self.expires_at
-
-    def __str__(self):
-        return f"Token for {self.user.username}"

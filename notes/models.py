@@ -8,9 +8,9 @@ class QRCode(models.Model):
     """Represents the physical or digital QR code."""
 
     class QRCodeShareChoices(models.TextChoices):
-        PRIVATE = "PR", "Privé"
-        OPEN_VIEW = "GR", "Ouvert au visionnage"
-        OPEN_EDIT = "OP", "Ouvert à l'édition"
+        PRIVATE = "PRIVATE", "Privé"
+        OPEN_VIEW = "OPEN_VIEW", "Ouvert au visionnage"
+        OPEN_EDIT = "OPEN_EDIT", "Ouvert à l'édition"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(
@@ -24,14 +24,22 @@ class QRCode(models.Model):
         related_name="QRcodes",
     )
     share_status = models.CharField(
-        choices=QRCodeShareChoices,
-        max_length=2,
+        choices=QRCodeShareChoices.choices,
+        max_length=10,
         default=QRCodeShareChoices.PRIVATE,
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"QR Code - {self.name} : {self.id}"
+
+    def is_allowed(self, user: User, edit=True):  # noqa: FBT002
+        return (
+            user.is_superuser
+            or self.owner.id == user.id
+            or self.share_status == self.QRCodeShareChoices.OPEN_EDIT
+            or (self.share_status == self.QRCodeShareChoices.OPEN_VIEW and not edit)
+        )
 
 
 class PointMixin(models.Model):
@@ -120,7 +128,7 @@ class TextNote(Note, AnchorMixin):
 
 
 def image_filename(instance, filename):
-    return "qrcode_{0}/{1}".format(instance.qrcode.id, filename)
+    return f"qrcode_{instance.qrcode.id}/{filename}"
 
 
 class ImageNote(Note, AnchorMixin):
