@@ -124,9 +124,9 @@ dev = [
     "django-browser-reload>=1.21.0",
     "django-stubs[compatible-mypy]>=6.0.5",
     "django-watchfiles>=1.4.0",
-    "djlint>=1.36.4",
+    "djlint>=1.39.2",
     "honcho>=2.0.0",
     "mypy>=1.19.1",
     "prek>=0.3.4",
-    "ruff>=0.15.2",
+    "ruff>=0.15.17",
 ]
