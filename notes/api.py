@@ -1,9 +1,8 @@
-from datetime import datetime  # noqa: TC003
 from enum import Enum
 from uuid import UUID  # noqa: TC003
 
 from django.shortcuts import get_object_or_404
-from ninja import File, ModelSchema, Router, Schema, UploadedFile
+from ninja import File, ModelSchema, Router, UploadedFile
 
 from notes.models import ArrowNote, ImageNote, Note, QRCode, TextNote
 
@@ -106,108 +105,80 @@ def get_qrcode_notes(request, qr_id: str):
 note_router = Router()
 
 
-class NoteBaseOut(Schema):
-    id: int
+# Output Schemas
+class TextNoteOut(ModelSchema):
     qrcode_id: UUID
-    note_type: str
-    title: str
-    created_at: datetime
-    updated_at: datetime
+
+    class Meta:
+        model = TextNote
+        fields = "__all__"
+        exclude = ["note_ptr"]
 
 
-class TextNoteOut(NoteBaseOut):
-    content: str
-    anchored: bool
-    pos_x: float
-    pos_y: float
-    pos_z: float
-    rot_x: float
-    rot_y: float
-    rot_z: float
-
-
-class ImageNoteOut(NoteBaseOut):
+class ImageNoteOut(ModelSchema):
+    qrcode_id: UUID
     image: str
-    anchored: bool
-    pos_x: float
-    pos_y: float
-    pos_z: float
-    rot_x: float
-    rot_y: float
-    rot_z: float
+
+    class Meta:
+        model = ImageNote
+        fields = "__all__"
+        exclude = ["note_ptr"]
 
 
-class ArrowNoteOut(NoteBaseOut):
-    pos_x: float
-    pos_y: float
-    pos_z: float
-    pos2_x: float
-    pos2_y: float
-    pos2_z: float
+class ArrowNoteOut(ModelSchema):
+    qrcode_id: UUID
+
+    class Meta:
+        model = ArrowNote
+        fields = "__all__"
+        exclude = ["note_ptr"]
 
 
-class TextNoteIn(Schema):
-    qrcode_id: str
-    title: str = ""
-    content: str
-    anchored: bool = True
-    pos_x: float = 0.0
-    pos_y: float = 0.0
-    pos_z: float = 0.0
-    rot_x: float = 0.0
-    rot_y: float = 0.0
-    rot_z: float = 0.0
+# Input Schemas
+class TextNoteIn(ModelSchema):
+    qrcode_id: UUID
+
+    class Meta:
+        model = TextNote
+        exclude = ["note_ptr", "id", "note_type", "created_at", "updated_at"]
+        fields_optional = "__all__"
 
 
-class ImageNoteIn(Schema):
-    qrcode_id: str
-    title: str = ""
-    anchored: bool = True
-    pos_x: float = 0.0
-    pos_y: float = 0.0
-    pos_z: float = 0.0
-    rot_x: float = 0.0
-    rot_y: float = 0.0
-    rot_z: float = 0.0
+class ImageNoteIn(ModelSchema):
+    qrcode_id: UUID
+
+    class Meta:
+        model = ImageNote
+        exclude = ["note_ptr", "id", "note_type", "image", "created_at", "updated_at"]
+        fields_optional = "__all__"
 
 
-class ArrowNoteIn(Schema):
-    qrcode_id: str
-    title: str = ""
-    pos_x: float = 0.0
-    pos_y: float = 0.0
-    pos_z: float = 0.0
-    pos2_x: float = 0.0
-    pos2_y: float = 0.0
-    pos2_z: float = 0.0
+class ArrowNoteIn(ModelSchema):
+    qrcode_id: UUID
+
+    class Meta:
+        model = ArrowNote
+        exclude = ["note_ptr", "id", "note_type", "created_at", "updated_at"]
+        fields_optional = "__all__"
 
 
 # Helper functions to convert ORM models to typed Ninja schemas
 def serialize_note(note: Note):
     if hasattr(note, "textnote"):
         return TextNoteOut.from_orm(note.textnote)
+
     if hasattr(note, "imagenote"):
-        # Explicitly build orm mapping for image urls
         img_note = note.imagenote
-        return ImageNoteOut(
-            id=img_note.id,
-            qrcode_id=str(img_note.qrcode_id),
-            note_type=img_note.note_type,
-            title=img_note.title,
-            created_at=str(img_note.created_at),
-            updated_at=str(img_note.updated_at),
-            image=img_note.image.url if img_note.image else "",
-            anchored=img_note.anchored,
-            pos_x=img_note.pos_x,
-            pos_y=img_note.pos_y,
-            pos_z=img_note.pos_z,
-            rot_x=img_note.rot_x,
-            rot_y=img_note.rot_y,
-            rot_z=img_note.rot_z,
-        )
-    if hasattr(note, "arithnote") or hasattr(note, "arrownote"):
+        # 1. Build the dictionary schema using Pydantic's from_orm/model_validate
+        data = ImageNoteOut.from_orm(img_note).dict()
+        # 2. Overwrite the file object with its actual string URL path
+        data["image"] = img_note.image.url if img_note.image else ""
+        return ImageNoteOut(**data)
+
+    if hasattr(note, "arrownote"):
         return ArrowNoteOut.from_orm(note.arrownote)
-    return NoteBaseOut.from_orm(note)
+
+    return note
 
 
 @note_router.post("notes/text", response={200: TextNoteOut, 403: dict})
@@ -218,7 +189,11 @@ def create_text_note(request, payload: TextNoteIn):
             "detail": "You do not have the necessary permissions to add elements here."
         }
 
-    note = TextNote.objects.create(**payload.dict())
+    fields = payload.dict(exclude_unset=True)
+    fields["qrcode"] = qrcode  # Django ORM will accept the full instance cleanly
+    del fields["qrcode_id"]
+
+    note = TextNote.objects.create(**fields)
     return TextNoteOut.from_orm(note)
 
 
@@ -233,8 +208,10 @@ def create_image_note(
     if not qrcode.is_allowed(request.auth, edit=True):
         return 403, {"detail": "You do not have permission to upload to this space."}
 
-    fields = payload.dict()
+    fields = payload.dict(exclude_unset=True)
     fields["image"] = file
+    fields["qrcode"] = qrcode  # Django ORM will accept the full instance cleanly
+    del fields["qrcode_id"]
 
     note = ImageNote.objects.create(**fields)
     return serialize_note(note)
@@ -246,7 +223,11 @@ def create_arrow_note(request, payload: ArrowNoteIn):
     if not qrcode.is_allowed(request.auth, edit=True):
         return 403, {"detail": "You do not have permission to edit."}
 
-    note = ArrowNote.objects.create(**payload.dict())
+    fields = payload.dict(exclude_unset=True)
+    fields["qrcode"] = qrcode  # Django ORM will accept the full instance cleanly
+    del fields["qrcode_id"]
+
+    note = ArrowNote.objects.create(**fields)
     return ArrowNoteOut.from_orm(note)
 
 
@@ -254,7 +235,6 @@ def create_arrow_note(request, payload: ArrowNoteIn):
 def delete_note(request, note_id: int):
     note = get_object_or_404(Note, id=note_id)
 
-    # Permission verification stems upwards via the related parent QRCode
     if not note.qrcode.is_allowed(request.auth, edit=True):
         return 403, {"detail": "You are not allowed to delete items from this anchor."}
 
