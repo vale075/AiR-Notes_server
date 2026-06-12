@@ -90,6 +90,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "ninja.compatibility.files.fix_request_files_middleware",  # https://django-ninja.dev/guides/input/file-params/#handling-requestfiles-in-putpatch-requests
 ]
 
 if DEBUG and not MINIMAL:

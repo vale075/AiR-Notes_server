@@ -112,7 +112,7 @@ class TextNoteOut(ModelSchema):
     class Meta:
         model = TextNote
         fields = "__all__"
-        exclude = ["note_ptr"]
+        exclude = ["note_ptr", "qrcode"]
 
 
 class ImageNoteOut(ModelSchema):
@@ -122,7 +122,7 @@ class ImageNoteOut(ModelSchema):
     class Meta:
         model = ImageNote
         fields = "__all__"
-        exclude = ["note_ptr"]
+        exclude = ["note_ptr", "qrcode"]
 
 
 class ArrowNoteOut(ModelSchema):
@@ -131,35 +131,61 @@ class ArrowNoteOut(ModelSchema):
     class Meta:
         model = ArrowNote
         fields = "__all__"
-        exclude = ["note_ptr"]
+        exclude = ["note_ptr", "qrcode"]
 
 
 # Input Schemas
-class TextNoteIn(ModelSchema):
-    qrcode_id: UUID
-
+class TextNoteBaseIn(ModelSchema):
     class Meta:
         model = TextNote
-        exclude = ["note_ptr", "id", "note_type", "created_at", "updated_at"]
+        exclude = ["note_ptr", "qrcode", "id", "note_type", "created_at", "updated_at"]
         fields_optional = "__all__"
 
 
-class ImageNoteIn(ModelSchema):
+class TextNoteIn(TextNoteBaseIn):
     qrcode_id: UUID
 
+
+class TextNoteUpdateIn(TextNoteBaseIn):
+    qrcode_id: UUID | None = None
+
+
+class ImageNoteBaseIn(ModelSchema):
     class Meta:
         model = ImageNote
-        exclude = ["note_ptr", "id", "note_type", "image", "created_at", "updated_at"]
+        exclude = [
+            "note_ptr",
+            "qrcode",
+            "id",
+            "note_type",
+            "image",
+            "created_at",
+            "updated_at",
+        ]
         fields_optional = "__all__"
 
 
-class ArrowNoteIn(ModelSchema):
+class ImageNoteIn(ImageNoteBaseIn):
     qrcode_id: UUID
 
+
+class ImageNoteUpdateIn(ImageNoteBaseIn):
+    qrcode_id: UUID | None = None
+
+
+class ArrowNoteBaseIn(ModelSchema):
     class Meta:
         model = ArrowNote
-        exclude = ["note_ptr", "id", "note_type", "created_at", "updated_at"]
+        exclude = ["note_ptr", "qrcode", "id", "note_type", "created_at", "updated_at"]
         fields_optional = "__all__"
+
+
+class ArrowNoteIn(ArrowNoteBaseIn):
+    qrcode_id: UUID  # Mandatory for POST
+
+
+class ArrowNoteUpdateIn(ArrowNoteBaseIn):
+    qrcode_id: UUID | None = None  # Optional for PUT
 
 
 # Helper functions to convert ORM models to typed Ninja schemas
@@ -228,6 +254,88 @@ def create_arrow_note(request, payload: ArrowNoteIn):
     del fields["qrcode_id"]
 
     note = ArrowNote.objects.create(**fields)
+    return ArrowNoteOut.from_orm(note)
+
+
+@note_router.put("notes/text/{note_id}", response={200: TextNoteOut, 403: dict})
+def update_text_note(request, note_id: int, payload: TextNoteUpdateIn):
+    note = get_object_or_404(TextNote, id=note_id)
+
+    # Permission verification via the parent QRCode relation
+    if not note.qrcode.is_allowed(request.auth, edit=True):
+        return 403, {"detail": "You do not have permission to edit this note."}
+
+    fields = payload.dict(exclude_unset=True)
+
+    # If the client wants to move the note to a different QRCode anchor
+    if "qrcode_id" in fields:
+        new_qrcode = get_object_or_404(QRCode, id=fields.pop("qrcode_id"))
+        if not new_qrcode.is_allowed(request.auth, edit=True):
+            return 403, {
+                "detail": "You do not have permission to move items to this QRCode."
+            }
+        note.qrcode = new_qrcode
+
+    for attr, value in fields.items():
+        setattr(note, attr, value)
+
+    note.save()
+    return TextNoteOut.from_orm(note)
+
+
+@note_router.put("notes/image/{note_id}", response={200: ImageNoteOut, 403: dict})
+def update_image_note(
+    request,
+    note_id: int,
+    payload: ImageNoteUpdateIn,
+    file: UploadedFile = File(None),  # noqa: B008
+):
+    note = get_object_or_404(ImageNote, id=note_id)
+
+    if not note.qrcode.is_allowed(request.auth, edit=True):
+        return 403, {"detail": "You do not have permission to edit this note."}
+
+    fields = payload.dict(exclude_unset=True)
+
+    if "qrcode_id" in fields:
+        new_qrcode = get_object_or_404(QRCode, id=fields.pop("qrcode_id"))
+        if not new_qrcode.is_allowed(request.auth, edit=True):
+            return 403, {
+                "detail": "You do not have permission to move items to this anchor."
+            }
+        note.qrcode = new_qrcode
+
+    if file:
+        fields["image"] = file
+
+    for attr, value in fields.items():
+        setattr(note, attr, value)
+
+    note.save()
+    return serialize_note(note)
+
+
+@note_router.put("notes/arrow/{note_id}", response={200: ArrowNoteOut, 403: dict})
+def update_arrow_note(request, note_id: int, payload: ArrowNoteUpdateIn):
+    note = get_object_or_404(ArrowNote, id=note_id)
+
+    if not note.qrcode.is_allowed(request.auth, edit=True):
+        return 403, {"detail": "You do not have permission to edit this note."}
+
+    fields = payload.dict(exclude_unset=True)
+
+    if "qrcode_id" in fields:
+        new_qrcode = get_object_or_404(QRCode, id=fields.pop("qrcode_id"))
+        if not new_qrcode.is_allowed(request.auth, edit=True):
+            return 403, {
+                "detail": "You do not have permission to move items to this anchor."
+            }
+        note.qrcode = new_qrcode
+
+    for attr, value in fields.items():
+        setattr(note, attr, value)
+
+    note.save()
     return ArrowNoteOut.from_orm(note)
 
 
