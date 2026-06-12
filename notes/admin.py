@@ -10,8 +10,9 @@ from .models import ArrowNote, ImageNote, QRCode, TextNote
 class TextNoteInline(admin.StackedInline):
     model = TextNote
     extra = 0
+    readonly_fields = ("id",)
     fieldsets = (
-        (None, {"fields": ("title", "content", "anchored")}),
+        (None, {"fields": ("id", "title", "content", "anchored")}),
         (
             "3D Positioning (Anchor)",
             {"fields": ("pos_x", "pos_y", "pos_z", "rot_x", "rot_y", "rot_z")},
@@ -22,8 +23,9 @@ class TextNoteInline(admin.StackedInline):
 class ImageNoteInline(admin.StackedInline):
     model = ImageNote
     extra = 0
+    readonly_fields = ("id",)
     fieldsets = (
-        (None, {"fields": ("title", "image", "anchored")}),
+        (None, {"fields": ("id", "title", "image", "anchored")}),
         (
             "3D Positioning (Anchor)",
             {"fields": ("pos_x", "pos_y", "pos_z", "rot_x", "rot_y", "rot_z")},
@@ -34,8 +36,17 @@ class ImageNoteInline(admin.StackedInline):
 class ArrowNoteInline(admin.StackedInline):
     model = ArrowNote
     extra = 0
+    readonly_fields = ("id",)
     fieldsets = (
-        (None, {"fields": ("title",)}),
+        (
+            None,
+            {
+                "fields": (
+                    "id",
+                    "title",
+                )
+            },
+        ),
         ("Start Point (Point 1)", {"fields": ("pos_x", "pos_y", "pos_z")}),
         ("End Point (Point 2)", {"fields": ("pos2_x", "pos2_y", "pos2_z")}),
     )
@@ -79,12 +90,13 @@ class QRCodeAdmin(admin.ModelAdmin):
 
 @admin.register(TextNote)
 class TextNoteAdmin(admin.ModelAdmin):
-    list_display = ("title", "qrcode", "anchored", "created_at")
+    list_display = ("id", "title", "qrcode", "anchored", "created_at")
     list_filter = ("anchored", "created_at")
     search_fields = ("title", "content", "qrcode__name")
+    readonly_fields = ("id",)
 
     fieldsets = (
-        ("General Info", {"fields": ("qrcode", "title", "content", "anchored")}),
+        ("General Info", {"fields": ("id", "qrcode", "title", "content", "anchored")}),
         ("3D Position (Vector 3)", {"fields": ("pos_x", "pos_y", "pos_z")}),
         ("3D Rotation", {"fields": ("rot_x", "rot_y", "rot_z")}),
     )
@@ -92,12 +104,13 @@ class TextNoteAdmin(admin.ModelAdmin):
 
 @admin.register(ImageNote)
 class ImageNoteAdmin(admin.ModelAdmin):
-    list_display = ("title", "qrcode", "image", "anchored", "created_at")
+    list_display = ("id", "title", "qrcode", "image", "anchored", "created_at")
     list_filter = ("anchored", "created_at")
     search_fields = ("title", "qrcode__name")
+    readonly_fields = ("id",)
 
     fieldsets = (
-        ("General Info", {"fields": ("qrcode", "title", "image", "anchored")}),
+        ("General Info", {"fields": ("id", "qrcode", "title", "image", "anchored")}),
         ("3D Position (Vector 3)", {"fields": ("pos_x", "pos_y", "pos_z")}),
         ("3D Rotation", {"fields": ("rot_x", "rot_y", "rot_z")}),
     )
@@ -105,12 +118,13 @@ class ImageNoteAdmin(admin.ModelAdmin):
 
 @admin.register(ArrowNote)
 class ArrowNoteAdmin(admin.ModelAdmin):
-    list_display = ("title", "qrcode", "created_at")
+    list_display = ("id", "title", "qrcode", "created_at")
     list_filter = ("created_at",)
     search_fields = ("title", "qrcode__name")
+    readonly_fields = ("id",)
 
     fieldsets = (
-        ("General Info", {"fields": ("qrcode", "title")}),
+        ("General Info", {"fields": ("id", "qrcode", "title")}),
         ("Start Point (PointMixin)", {"fields": ("pos_x", "pos_y", "pos_z")}),
         ("End Point (Point2Mixin)", {"fields": ("pos2_x", "pos2_y", "pos2_z")}),
     )
