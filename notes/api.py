@@ -207,6 +207,21 @@ def serialize_note(note: Note):
     return note
 
 
+@note_router.get("notes/{note_id}", response={200: dict, 403: dict})
+def get_note(request, note_id: int):
+    note = get_object_or_404(Note, id=note_id)
+
+    if not note.qrcode.is_allowed(request.auth, edit=False):
+        return 403, {"detail": "You do not have permission to view this note."}
+
+    serialized_data = serialize_note(note)
+
+    if hasattr(serialized_data, "dict"):
+        return serialized_data.dict()
+
+    return serialized_data
+
+
 @note_router.post("notes/text", response={200: TextNoteOut, 403: dict})
 def create_text_note(request, payload: TextNoteIn):
     qrcode = get_object_or_404(QRCode, id=payload.qrcode_id)
