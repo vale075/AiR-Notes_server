@@ -1,40 +1,25 @@
 from django.contrib.auth import authenticate
 from ninja import ModelSchema, NinjaAPI, Swagger
-from ninja.security import HttpBearer
 from ninja.throttling import AnonRateThrottle, AuthRateThrottle
 
+from AiR_Notes_server.api_auth import default_auth
 from notes.api import note_router, qrcode_router
 from users.api import router as user_router
 from users.models import Token
 
-
-class TokenAuth(HttpBearer):
-    def authenticate(self, request, token):
-        if not token:
-            return None
-
-        try:
-            # Look up the token in the database
-            db_token = Token.objects.select_related("user").get(key=token)
-        except Token.DoesNotExist:
-            return None
-        else:
-            # Check if the token has expired
-            if db_token.is_expired:
-                db_token.delete()  # Clean up expired token
-                return None
-
-            # Return the user object. Django Ninja will attach this to request.auth
-            return db_token.user
-
-
 api = NinjaAPI(
-    auth=TokenAuth(),
+    auth=default_auth,
     throttle=[
         AnonRateThrottle("10/s"),
         AuthRateThrottle("100/s"),
     ],
-    docs=Swagger(settings={"persistAuthorization": True}),
+    docs=Swagger(
+        settings={
+            "persistAuthorization": True,
+            "displayRequestDuration": True,
+            "tryItOutEnabled": True,
+        }
+    ),
     title="AiR Notes API",
 )
 

@@ -4,6 +4,7 @@ from uuid import UUID  # noqa: TC003
 from django.shortcuts import get_object_or_404
 from ninja import File, ModelSchema, Router, UploadedFile
 
+from AiR_Notes_server.api_auth import guest_allowed_auth
 from notes.models import ArrowNote, ImageNote, Note, QRCode, TextNote
 
 qrcode_router = Router()
@@ -68,7 +69,9 @@ def get_all_qrcodes(request):
     return QRCode.objects.all()
 
 
-@qrcode_router.get("qrcode/{qr_id}", response={200: QRCodeOut, 403: dict})
+@qrcode_router.get(
+    "qrcode/{qr_id}", auth=guest_allowed_auth, response={200: QRCodeOut, 403: dict}
+)
 def get_qrcode(request, qr_id: str):
     qrcode = get_object_or_404(QRCode, id=qr_id)
 
@@ -78,7 +81,9 @@ def get_qrcode(request, qr_id: str):
     return qrcode
 
 
-@qrcode_router.put("qrcode/{qr_id}", response={200: QRCodeOut, 403: dict})
+@qrcode_router.put(
+    "qrcode/{qr_id}", auth=guest_allowed_auth, response={200: QRCodeOut, 403: dict}
+)
 def edit_qrcode(request, qr_id: str, payload: QRCodeIn):
     qrcode = get_object_or_404(QRCode, id=qr_id)
 
@@ -92,7 +97,11 @@ def edit_qrcode(request, qr_id: str, payload: QRCodeIn):
     return qrcode
 
 
-@qrcode_router.get("qrcode/{qr_id}/notes", response={200: list, 403: dict})
+@qrcode_router.get(
+    "qrcode/{qr_id}/notes",
+    auth=guest_allowed_auth,
+    response={200: list, 403: dict},
+)
 def get_qrcode_notes(request, qr_id: str):
     qrcode = get_object_or_404(QRCode, id=qr_id)
 
@@ -207,7 +216,9 @@ def serialize_note(note: Note):
     return note
 
 
-@note_router.get("notes/{note_id}", response={200: dict, 403: dict})
+@note_router.get(
+    "notes/{note_id}", auth=guest_allowed_auth, response={200: dict, 403: dict}
+)
 def get_note(request, note_id: int):
     note = get_object_or_404(Note, id=note_id)
 
@@ -222,7 +233,9 @@ def get_note(request, note_id: int):
     return serialized_data
 
 
-@note_router.post("notes/text", response={200: TextNoteOut, 403: dict})
+@note_router.post(
+    "notes/text", auth=guest_allowed_auth, response={200: TextNoteOut, 403: dict}
+)
 def create_text_note(request, payload: TextNoteIn):
     qrcode = get_object_or_404(QRCode, id=payload.qrcode_id)
     if not qrcode.is_allowed(request.auth, edit=True):
@@ -238,7 +251,9 @@ def create_text_note(request, payload: TextNoteIn):
     return TextNoteOut.from_orm(note)
 
 
-@note_router.post("notes/image", response={200: ImageNoteOut, 403: dict})
+@note_router.post(
+    "notes/image", auth=guest_allowed_auth, response={200: ImageNoteOut, 403: dict}
+)
 def create_image_note(
     request,
     payload: ImageNoteIn,
@@ -258,7 +273,9 @@ def create_image_note(
     return serialize_note(note)
 
 
-@note_router.post("notes/arrow", response={200: ArrowNoteOut, 403: dict})
+@note_router.post(
+    "notes/arrow", auth=guest_allowed_auth, response={200: ArrowNoteOut, 403: dict}
+)
 def create_arrow_note(request, payload: ArrowNoteIn):
     qrcode = get_object_or_404(QRCode, id=payload.qrcode_id)
     if not qrcode.is_allowed(request.auth, edit=True):
@@ -272,7 +289,11 @@ def create_arrow_note(request, payload: ArrowNoteIn):
     return ArrowNoteOut.from_orm(note)
 
 
-@note_router.put("notes/text/{note_id}", response={200: TextNoteOut, 403: dict})
+@note_router.put(
+    "notes/text/{note_id}",
+    auth=guest_allowed_auth,
+    response={200: TextNoteOut, 403: dict},
+)
 def update_text_note(request, note_id: int, payload: TextNoteUpdateIn):
     note = get_object_or_404(TextNote, id=note_id)
 
@@ -298,7 +319,11 @@ def update_text_note(request, note_id: int, payload: TextNoteUpdateIn):
     return TextNoteOut.from_orm(note)
 
 
-@note_router.put("notes/image/{note_id}", response={200: ImageNoteOut, 403: dict})
+@note_router.put(
+    "notes/image/{note_id}",
+    auth=guest_allowed_auth,
+    response={200: ImageNoteOut, 403: dict},
+)
 def update_image_note(
     request,
     note_id: int,
@@ -330,7 +355,11 @@ def update_image_note(
     return serialize_note(note)
 
 
-@note_router.put("notes/arrow/{note_id}", response={200: ArrowNoteOut, 403: dict})
+@note_router.put(
+    "notes/arrow/{note_id}",
+    auth=guest_allowed_auth,
+    response={200: ArrowNoteOut, 403: dict},
+)
 def update_arrow_note(request, note_id: int, payload: ArrowNoteUpdateIn):
     note = get_object_or_404(ArrowNote, id=note_id)
 
@@ -354,7 +383,9 @@ def update_arrow_note(request, note_id: int, payload: ArrowNoteUpdateIn):
     return ArrowNoteOut.from_orm(note)
 
 
-@note_router.delete("notes/{note_id}", response={200: dict, 403: dict})
+@note_router.delete(
+    "notes/{note_id}", auth=guest_allowed_auth, response={200: dict, 403: dict}
+)
 def delete_note(request, note_id: int):
     note = get_object_or_404(Note, id=note_id)
 
