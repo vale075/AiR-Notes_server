@@ -46,7 +46,7 @@
   "remoteUser": "vscode",
   "workspaceFolder": "/app",
   // Those commands setup the dev env.
-  "postCreateCommand": "cp -u .env.dist .env && uv sync && uv run prek install -f && uv run manage.py migrate && uv run manage.py createcachetable && uv run prek install-hooks",
+  "postCreateCommand": "cp -u .env.dist .env && uv sync && uv run prek install -f && uv run manage.py migrate && uv run manage.py createcachetable && DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_EMAIL= DJANGO_SUPERUSER_PASSWORD=PMR2026 uv run manage.py createsuperuser --noinput && uv run prek install-hooks",
   "forwardPorts": [
     8000,
     "mailpit:8025",
