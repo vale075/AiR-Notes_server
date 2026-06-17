@@ -39,6 +39,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", api.urls),
     path("", include("notes.urls")),
+    path("", include("users.urls")),
 ]
 
 # Made with ChatGPT to serve Media files even when debug=False

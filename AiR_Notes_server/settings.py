@@ -195,7 +195,8 @@ INTERNAL_IPS = [
 ]
 
 LOGIN_REDIRECT_URL = "/"
-LOGIN_URL = "login"
+LOGIN_URL = "/admin/login/"
+LOGOUT_URL = "/admin/logout/"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"

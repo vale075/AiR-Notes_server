@@ -1,8 +1,10 @@
 import io
 
 import qrcode
+from django.conf import settings
+from django.contrib import messages
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import cache_page
 from django.views.decorators.vary import vary_on_headers
@@ -49,7 +51,20 @@ def qrcode_landing_view(request, qr_id):
     qrcode_obj = get_object_or_404(QRCode, id=qr_id)
 
     context = {
-        "qr_id": qrcode_obj.id,
-        "qr_name": qrcode_obj.name,
+        "qrcode": qrcode_obj,
+        "edit": qrcode_obj.is_allowed(request.user),
+        "allowed": qrcode_obj.is_allowed(request.user, edit=False),
+        "login": f"{settings.LOGIN_URL}?next={request.path}",
     }
+
+    if not context["allowed"]:
+        if not request.user.is_authenticated:
+            messages.warning(
+                request,
+                "Ce QRCode et ses notes sont privés. Vous n'avez pas l'autorisation d'y accéder.",
+            )
+            return redirect(context["login"])
+
+        return render(request, "notes/qrcode_landing.html", context)
+
     return render(request, "notes/qrcode_landing.html", context)

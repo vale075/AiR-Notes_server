@@ -1,94 +1,175 @@
+{% load static %}
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Opening App...</title>
+    <title>AiR Notes - Expérience AR</title>
     <style>
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f4f7f6;
         display: flex;
-        flex-direction: column;
-        align-items: center;
         justify-content: center;
+        align-items: center;
         height: 100vh;
         margin: 0;
-        background-color: #f9fafb;
-        color: #1f2937;
+      }
+
+      .card {
+        background: white;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         text-align: center;
-      }
-
-      .container {
         max-width: 400px;
-        padding: 20px;
+        width: 100%;
       }
 
-      .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #3b82f6;
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 20px;
+      h1 {
+        color: #333;
+        margin-bottom: 5px;
       }
 
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-
-        100% {
-          transform: rotate(360deg);
-        }
+      .owner {
+        color: #777;
+        font-style: italic;
+        margin-bottom: 30px;
       }
 
-      .btn {
+      /* Gros bouton AR */
+      .btn-ar {
         display: inline-block;
-        margin-top: 20px;
-        padding: 10px 20px;
-        background-color: #3b82f6;
+        background: linear-gradient(135deg, #6c5ce7, #a29bfe);
         color: white;
+        border: none;
+        padding: 15px 40px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        border-radius: 50px;
+        cursor: pointer;
         text-decoration: none;
-        border-radius: 6px;
-        font-weight: 500;
+        box-shadow: 0 5px 15px rgba(108, 92, 231, 0.4);
+        transition: transform 0.2s, box-shadow 0.2s;
+        margin-bottom: 40px;
+      }
+
+      .btn-ar:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(108, 92, 231, 0.6);
+      }
+
+      /* Message Privé */
+      .private-notice {
+        background-color: #ffeaa7;
+        color: #d63031;
+        padding: 15px;
+        border-radius: 8px;
+        font-weight: bold;
+        margin-bottom: 30px;
+        border: 1px solid #ff7675;
+      }
+
+      /* Bouton de connexion / déconnexion */
+      .btn-auth {
+        display: inline-block;
+        color: #636e72;
+        text-decoration: none;
+        font-size: 0.9rem;
+        border: 1px solid #b2bec3;
+        padding: 8px 20px;
+        border-radius: 5px;
+        transition: background 0.2s;
+      }
+
+      .btn-auth:hover {
+        background-color: #eee;
+        color: #2d3436;
       }
     </style>
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
+    <script src="{% static "a-frame/components.js" %}"></script>
   </head>
   <body>
-    <div class="container">
-      <div class="spinner"></div>
-      <h2>Opening your AR Note...</h2>
-      <p>We are redirecting you to the app. If nothing happens, you can download the app or try the link below.</p>
-      <!-- Fallback button in case automatic redirection is blocked by the browser -->
-      <a id="fallback-button" href="#" class="btn">Download App</a>
+    <div class="card">
+      <h2 style="color: #6c5ce7; margin-top: 0;">AiR Notes 🕶️</h2>
+      <h1>{{ qrcode.name }}</h1>
+      <p class="owner">Créé par : {{ qrcode.owner.username }}</p>
+      {% if allowed %}
+        <button id="start-ar-btn" class="btn-ar">🚀 Lancer l'expérience AR</button>
+      {% else %}
+        <div class="private-notice">🔒 Ce QRCode et ses notes sont privés. Vous n'avez pas l'autorisation d'y accéder.</div>
+      {% endif %}
+      <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 20px;">
+      {% if user.is_authenticated %}
+        <p style="font-size: 0.85rem; color: #555;">
+          Connecté en tant que <strong>{{ user.username }}</strong>
+        </p>
+        <a href="{% url 'logout' %}?next={{ request.path }}" class="btn-auth">Se déconnecter</a>
+      {% else %}
+        <a href="{{ login }}" class="btn-auth">Se connecter</a>
+      {% endif %}
     </div>
-    <script>
-      // --- CONFIGURATION ---
-      // Replace 'myapp' with your mobile app's custom URL scheme (defined in AndroidManifest.xml)
-      const appCustomUri = "myapp://qrcode/{{ qr_id }}";
-
-      // Replace with your actual Google Play Store URL or package name
-      const playStoreUrl = "https://play.google.com/store/apps/details?id=com.yourcompany.yourapp";
-
-      // Set the fallback button link just in case
-      document.getElementById('fallback-button').href = playStoreUrl;
-
-      // --- REDIRECTION LOGIC ---
-      // 1. Try to open the mobile app instantly using the custom URI scheme
-      window.location.href = appCustomUri;
-
-      // 2. Set a fallback timer. If the app opens, this tab loses focus or suspends.
-      // If the app isn't installed, the browser stays here, the timer fires, and sends them to the store.
-      const start = Date.now();
-      setTimeout(function() {
-        // Optimization: If the user explicitly swiped away or the app opened,
-        // the elapsed time will feel longer because the browser tab paused.
-        // If they are still actively waiting on this page, run the redirect.
-        if (Date.now() - start < 2000) {
-          window.location.href = playStoreUrl;
-        }
-      }, 1500); // 1.5 second buffer
-    </script>
+    <a-scene renderer="alpha: true;"
+             embedded
+             webxr="mode: ar; requiredFeatures: hit-test; referenceSpaceType: local;"
+             xr-mode-ui="enabled: true; XRMode: ar"
+             vr-mode-ui="enabled: false"
+             style="background: transparent;
+                    display: none;
+                    width: 100%;
+                    height: 100%;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    z-index: 10">
+      <a-sky hide-on-enter-ar color="#c2ffe8">
+      </a-sky>
+      <a-box position="-1 4 -3" rotation="0 45 0" color="#4CC3D9">
+      </a-box>
+      <a-plane position="0 0 -4"
+               rotation="-90 0 0"
+               width="4"
+               height="4"
+               color="#7BC8A4">
+      </a-plane>
+      <a-entity my-note="text: Check oil level; color: #2a2a4e"
+                position="0 1 -2"
+                look-at="#camera">
+      </a-entity>
+      <a-entity id="camera" camera wasd-controls look-controls>
+        <a-entity geometry="primitive: plane; height: 0.2; width: 0.2"
+                  position="0 0 -1"
+                  material="color: gray; opacity: 0.5">
+        </a-entity>
+      </a-entity>
+    </a-scene>
   </body>
+  <script>
+    const sceneEl = document.querySelector('a-scene');
+
+    // 1. Force the scene to pause as soon as it's loaded in the DOM
+    if (sceneEl.hasLoaded) {
+      sceneEl.pause();
+    } else {
+      sceneEl.addEventListener('loaded', function() {
+        sceneEl.pause();
+      });
+    }
+
+    // 2. Handle the button click to wake up and launch AR
+    document.getElementById('start-ar-btn').addEventListener('click', function() {
+      if (sceneEl) {
+        // Make the scene visible
+        sceneEl.style.display = 'block';
+
+        // Wake up A-Frame systems and render loop
+        sceneEl.play();
+        sceneEl.resize(); // Or else it doesnt show at all
+        sceneEl.enterAR();
+      }
+    });
+  </script>
 </html>
