@@ -68,3 +68,7 @@ def qrcode_landing_view(request, qr_id):
         return render(request, "notes/qrcode_landing.html", context)
 
     return render(request, "notes/qrcode_landing.html", context)
+
+
+def voice_dev_view(request):
+    return render(request, "notes/voice_dev.html")

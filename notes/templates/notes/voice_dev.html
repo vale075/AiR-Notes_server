@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test de l'API Web Speech</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 40px 20px;
+        background-color: #f4f7f6;
+        display: flex;
+        justify-content: center;
+      }
+
+      .container {
+        max-width: 600px;
+        width: 100%;
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        text-align: center;
+      }
+
+      h2 {
+        color: #333;
+        margin-top: 0;
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 600;
+        background-color: #e9ecef;
+        color: #495057;
+        margin-bottom: 20px;
+      }
+
+      .status-listening {
+        background-color: #d4edda;
+        color: #155724;
+      }
+
+      .status-error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+
+      button {
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        border: none;
+        border-radius: 6px;
+        background-color: #007bff;
+        color: white;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      button:active {
+        transform: scale(0.98);
+      }
+
+      button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+      }
+
+      #output {
+        margin-top: 25px;
+        padding: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        min-height: 120px;
+        background: #fff;
+        text-align: left;
+        white-space: pre-wrap;
+        font-size: 16px;
+        line-height: 1.5;
+        color: #212529;
+      }
+
+      .interim {
+        color: #6c757d;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Test de la reconnaissance vocale</h2>
+      <div id="status" class="status-badge">Statut : En attente</div>
+      <br>
+      <button id="start-btn">Démarrer l'écoute</button>
+      <div id="output">Votre texte dicté apparaîtra ici en temps réel...</div>
+    </div>
+    <script>
+      // Vérification de la compatibilité du navigateur (Chrome et Edge utilisent webkitSpeechRecognition)
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      const startBtn = document.getElementById('start-btn');
+      const output = document.getElementById('output');
+      const statusBadge = document.getElementById('status');
+
+      if (!SpeechRecognition) {
+        statusBadge.innerText = "Statut : Non supporté par le navigateur";
+        statusBadge.className = "status-badge status-error";
+        startBtn.disabled = true;
+        output.innerText = "La reconnaissance vocale n'est pas supportée par ce navigateur. Essayez avec Google Chrome, Microsoft Edge ou Safari.";
+      } else {
+        const recognition = new SpeechRecognition();
+
+        // Configuration
+        recognition.continuous = true; // Continue d'écouter même si l'on fait des pauses
+        recognition.interimResults = true; // Affiche les résultats en temps réel (mots suggérés)
+        recognition.lang = 'fr-FR'; // Force la reconnaissance en français
+
+        let isListening = false;
+
+        startBtn.addEventListener('click', () => {
+          if (!isListening) {
+            recognition.start();
+          } else {
+            recognition.stop();
+          }
+        });
+
+        // Déclenché lorsque le micro s'active et commence à écouter
+        recognition.onstart = () => {
+          isListening = true;
+          statusBadge.innerText = "Statut : Écoute en cours...";
+          statusBadge.className = "status-badge status-listening";
+          startBtn.innerText = "Arrêter l'écoute";
+          startBtn.style.backgroundColor = "#dc3545"; // Bouton passe au rouge
+          output.innerHTML = "<span class='interim'>Parlez maintenant...</span>";
+        };
+
+        // Déclenché lorsque la session d'écoute s'arrête
+        recognition.onend = () => {
+          isListening = false;
+          statusBadge.innerText = "Statut : En attente";
+          statusBadge.className = "status-badge";
+          startBtn.innerText = "Démarrer l'écoute";
+          startBtn.style.backgroundColor = "#007bff"; // Bouton repasse au bleu
+        };
+
+        // Traitement des données audio converties en texte
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript + ' ';
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+
+          // Met à jour l'affichage (texte validé en gras, texte en cours de traitement en italique gris)
+          output.innerHTML = `<strong>${finalTranscript}</strong> <span class="interim">${interimTranscript}</span>`;
+        };
+
+        // Gestion des erreurs (refus de micro, etc.)
+        recognition.onerror = (event) => {
+          console.error("Erreur de reconnaissance vocale :", event.error);
+          statusBadge.innerText = `Statut : Erreur (${event.error})`;
+          statusBadge.className = "status-badge status-error";
+
+          if (event.error === 'not-allowed') {
+            output.innerText = "Permission refusée. Veuillez autoriser l'accès au microphone dans les paramètres de votre navigateur.";
+          }
+        };
+      }
+    </script>
+  </body>
+</html>

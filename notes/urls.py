@@ -9,4 +9,5 @@ urlpatterns = [
     path(
         "qrcodes/<uuid:qr_id>/image/", views.generate_qr_code_image, name="qrcode_image"
     ),
+    path("voice_dev", views.voice_dev_view, name="voice_dev"),
 ]
