@@ -36,7 +36,7 @@
         background-color: #6200ea;
         color: white;
         cursor: pointer;
-        margin: 20px 0;
+        margin: 10px;
         transition: background-color 0.3s;
       }
 
@@ -44,13 +44,43 @@
         background-color: #7c4dff;
       }
 
+      button:disabled {
+        background-color: #444;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
       button.listening {
         background-color: #b00020;
+      }
+
+      button.secondary {
+        background-color: #2c2c2c;
+        border: 1px solid #555;
+      }
+
+      button.secondary:hover {
+        background-color: #3a3a3a;
+      }
+
+      .button-row {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin: 10px 0;
       }
 
       #status {
         font-size: 1.2rem;
         color: #03dac6;
+        margin-bottom: 10px;
+        min-height: 1.5em;
+      }
+
+      #retryInfo {
+        font-size: 0.95rem;
+        color: #999;
+        min-height: 1.2em;
         margin-bottom: 10px;
       }
 
@@ -74,89 +104,286 @@
         color: #cf6679;
         font-weight: bold;
       }
+
+      .warning-box {
+        display: none;
+        margin-top: 20px;
+        padding: 1.2rem;
+        background: rgba(176, 0, 32, 0.15);
+        border: 1px solid #b00020;
+        border-radius: 10px;
+        text-align: left;
+        font-size: 1.1rem;
+      }
+
+      .warning-box.visible {
+        display: block;
+      }
+
+      .warning-box h3 {
+        margin-top: 0;
+        color: #ff8a80;
+      }
+
+      #manualFallback {
+        display: none;
+        margin-top: 20px;
+        width: 100%;
+      }
+
+      #manualFallback.visible {
+        display: block;
+      }
+
+      #manualInput {
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 1.4rem;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #555;
+        background: #1a1a1a;
+        color: #fff;
+        min-height: 120px;
+        resize: vertical;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <h2>Reconnaissance Vocale AR</h2>
       <div id="status">Statut : Prêt</div>
-      <button id="btn-toggle">Activer le Micro</button>
+      <div id="retryInfo"></div>
+      <div class="button-row">
+        <button id="btn-toggle">Activer le Micro</button>
+        <button id="btn-clear" class="secondary">Effacer</button>
+      </div>
       <div id="output">Appuyez sur le bouton avec votre contrôleur et parlez...</div>
+      <!-- Avertissement affiché uniquement après échecs répétés du moteur vocal -->
+      <div id="warningBox" class="warning-box">
+        <h3>⚠ Le moteur vocal du casque semble indisponible</h3>
+        <p>
+          Après plusieurs tentatives, la reconnaissance vocale n'a pas pu être contactée.
+          Ce n'est généralement pas un problème de votre réseau Wi-Fi, mais une limite du
+          service vocal embarqué sur ce casque. Vous pouvez continuer en saisissant le texte
+          manuellement ci-dessous.
+        </p>
+        <button id="btn-show-manual" class="secondary">Utiliser la saisie manuelle</button>
+      </div>
+      <!-- Mode de secours : saisie manuelle (clavier virtuel ML2 ou clavier Bluetooth) -->
+      <div id="manualFallback">
+        <textarea id="manualInput"
+                  placeholder="Saisissez votre texte ici en secours..."></textarea>
+        <div class="button-row">
+          <button id="btn-manual-validate">Valider le texte</button>
+        </div>
+      </div>
     </div>
     <script>
       const statusEl = document.getElementById('status');
+      const retryInfoEl = document.getElementById('retryInfo');
       const outputEl = document.getElementById('output');
       const btnToggle = document.getElementById('btn-toggle');
+      const btnClear = document.getElementById('btn-clear');
+      const warningBox = document.getElementById('warningBox');
+      const btnShowManual = document.getElementById('btn-show-manual');
+      const manualFallback = document.getElementById('manualFallback');
+      const manualInput = document.getElementById('manualInput');
+      const btnManualValidate = document.getElementById('btn-manual-validate');
 
-      // Initialisation
+      // --- Config du mécanisme de retry / backoff ---
+      const MAX_CONSECUTIVE_FAILURES = 4; // au-delà, on propose le mode manuel
+      const BASE_RETRY_DELAY_MS = 800; // délai initial avant un redémarrage
+      const MAX_RETRY_DELAY_MS = 8000; // plafond du backoff exponentiel
+      const SILENCE_RESTART_GRACE_MS = 300; // petite pause avant restart normal (no-speech / end naturel)
+
+      let finalTranscript = '';
+      let consecutiveFailures = 0;
+      let retryTimeoutId = null;
+      let isListening = false; // intention de l'utilisateur (a-t-il appuyé sur "Activer" ?)
+      let recognitionActive = false; // le moteur est-il réellement en train d'écouter ?
+
+      function setStatus(text, isError = false) {
+        statusEl.innerHTML = isError ? `<span class="error">${text}</span>` : text;
+      }
+
+      function clearRetryTimer() {
+        if (retryTimeoutId) {
+          clearTimeout(retryTimeoutId);
+          retryTimeoutId = null;
+        }
+      }
+
+      function showManualFallbackPrompt() {
+        warningBox.classList.add('visible');
+      }
+
+      function hideManualFallbackPrompt() {
+        warningBox.classList.remove('visible');
+      }
+
+      function activateManualMode() {
+        manualFallback.classList.add('visible');
+        warningBox.classList.remove('visible');
+        manualInput.focus();
+      }
+
+      btnShowManual.addEventListener('click', activateManualMode);
+
+      btnManualValidate.addEventListener('click', () => {
+        const text = manualInput.value.trim();
+        if (!text) return;
+        finalTranscript += text + ' ';
+        outputEl.innerHTML = `<strong>${finalTranscript}</strong>`;
+        manualInput.value = '';
+      });
+
+      btnClear.addEventListener('click', () => {
+        finalTranscript = '';
+        outputEl.innerHTML = 'Appuyez sur le bouton avec votre contrôleur et parlez...';
+      });
+
+      // --- Initialisation de l'API native ---
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        statusEl.innerHTML = "<span class='error'>API Web Speech non supportée sur ce navigateur.</span>";
-        btnToggle.style.display = 'none';
+        setStatus("API Web Speech non supportée sur ce navigateur.", true);
+        btnToggle.disabled = true;
+        showManualFallbackPrompt();
       } else {
         const recognition = new SpeechRecognition();
         recognition.lang = 'fr-FR';
         recognition.continuous = true;
         recognition.interimResults = true;
 
-        let isListening = false;
-
         btnToggle.addEventListener('click', () => {
           if (isListening) {
-            recognition.stop();
-          } else {
+            // Arrêt volontaire demandé par l'utilisateur
+            isListening = false;
+            clearRetryTimer();
             try {
-              recognition.start();
+              recognition.stop();
             } catch (e) {
-              console.error(e);
+              /* déjà arrêté */
             }
+          } else {
+            // Démarrage volontaire : on réinitialise le compteur d'échecs
+            isListening = true;
+            consecutiveFailures = 0;
+            retryInfoEl.innerText = '';
+            hideManualFallbackPrompt();
+            startRecognitionSafely();
           }
         });
 
+        function startRecognitionSafely() {
+          if (recognitionActive) return; // déjà en cours, évite le double-start
+          try {
+            recognition.start();
+          } catch (e) {
+            // start() peut throw si appelé alors qu'une instance est déjà active
+            console.warn('Impossible de démarrer la reconnaissance :', e);
+            scheduleRetry();
+          }
+        }
+
+        function scheduleRetry() {
+          if (!isListening) return; // l'utilisateur a annulé pendant ce temps
+
+          consecutiveFailures++;
+
+          if (consecutiveFailures > MAX_CONSECUTIVE_FAILURES) {
+            // On arrête d'insister : le moteur vocal du casque semble indisponible
+            isListening = false;
+            btnToggle.innerText = "Activer le Micro";
+            btnToggle.classList.remove('listening');
+            setStatus("Moteur vocal indisponible après plusieurs tentatives.", true);
+            retryInfoEl.innerText = '';
+            showManualFallbackPrompt();
+            return;
+          }
+
+          // Backoff exponentiel plafonné, pour ne pas spammer le service
+          const delay = Math.min(
+            BASE_RETRY_DELAY_MS * Math.pow(2, consecutiveFailures - 1),
+            MAX_RETRY_DELAY_MS
+          );
+
+          retryInfoEl.innerText =
+            `Nouvelle tentative ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} dans ${(delay / 1000).toFixed(1)}s...`;
+
+          clearRetryTimer();
+          retryTimeoutId = setTimeout(() => {
+            if (isListening) startRecognitionSafely();
+          }, delay);
+        }
+
         recognition.onstart = () => {
-          isListening = true;
-          statusEl.innerText = "Statut : Écoute en cours (Parlez maintenant)";
+          recognitionActive = true;
+          setStatus("Écoute en cours (Parlez maintenant)");
+          retryInfoEl.innerText = '';
           btnToggle.innerText = "Désactiver le Micro";
           btnToggle.classList.add('listening');
         };
 
         recognition.onresult = (event) => {
-          let final = '';
+          // Un résultat positif confirme que le moteur fonctionne : on réinitialise les échecs
+          consecutiveFailures = 0;
           let interim = '';
 
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
-              final += event.results[i][0].transcript + ' ';
+              finalTranscript += event.results[i][0].transcript + ' ';
             } else {
               interim += event.results[i][0].transcript;
             }
           }
-          outputEl.innerHTML = `<strong>${final}</strong> <span class="interim">${interim}</span>`;
+          outputEl.innerHTML = `<strong>${finalTranscript}</strong> <span class="interim">${interim}</span>`;
         };
 
         recognition.onerror = (event) => {
-          isListening = false;
-          btnToggle.innerText = "Activer le Micro";
-          btnToggle.classList.remove('listening');
+          recognitionActive = false;
+
+          if (event.error === 'no-speech') {
+            // Pas une vraie erreur : personne n'a parlé. On redémarre tranquillement.
+            setStatus("En attente de voix...");
+            return;
+          }
+
+          if (event.error === 'aborted') {
+            // Provoqué par un stop() volontaire, rien à signaler
+            return;
+          }
 
           if (event.error === 'network') {
-            statusEl.innerHTML = "<span class='error'>Erreur : Le ML2 nécessite une connexion internet pour traiter la voix.</span>";
+            setStatus("Erreur réseau : le service vocal du casque ne répond pas.", true);
           } else if (event.error === 'not-allowed') {
-            statusEl.innerHTML = "<span class='error'>Erreur : Autorisation du micro refusée. Acceptez le prompt de sécurité.</span>";
-          } else if (event.error === 'service-not-allowed' || event.error === 'no-speech') {
-            statusEl.innerHTML = `<span class='error'>Erreur (${event.error}) : Moteur vocal AOSP manquant ou aucun son détecté.</span>`;
+            setStatus("Autorisation du micro refusée. Acceptez le prompt de sécurité.", true);
+            isListening = false; // pas la peine de retenter sans permission
+            btnToggle.innerText = "Activer le Micro";
+            btnToggle.classList.remove('listening');
+            return;
+          } else if (event.error === 'service-not-allowed') {
+            setStatus("Moteur vocal AOSP manquant sur ce casque.", true);
           } else {
-            statusEl.innerHTML = `<span class='error'>Erreur : ${event.error}</span>`;
+            setStatus(`Erreur : ${event.error}`, true);
           }
+
+          if (isListening) scheduleRetry();
         };
 
         recognition.onend = () => {
+          recognitionActive = false;
+
           if (isListening) {
-            // Redémarre automatiquement si l'arrêt n'est pas volontaire
-            recognition.start();
+            // L'arrêt n'était pas volontaire : on retente après une courte pause,
+            // sans incrémenter le compteur d'échecs (ce n'est pas forcément une erreur).
+            clearRetryTimer();
+            retryTimeoutId = setTimeout(() => {
+              if (isListening) startRecognitionSafely();
+            }, SILENCE_RESTART_GRACE_MS);
           } else {
-            statusEl.innerText = "Statut : Prêt";
+            setStatus("Prêt");
             btnToggle.innerText = "Activer le Micro";
             btnToggle.classList.remove('listening');
           }
