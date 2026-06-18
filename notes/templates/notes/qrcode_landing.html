@@ -125,6 +125,13 @@
                     top: 0;
                     left: 0;
                     z-index: 10">
+      <a-assets>
+        <a-mixin id="txtnote"
+                 geometry="primitive: plane; height: 0; width: 0"
+                 material="color: white; side: double; opacity: .5; transparent: true"
+                 text="color: black; align: center">
+        </a-mixin>
+      </a-assets>
       <a-sky hide-on-enter-ar color="#c2ffe8">
       </a-sky>
       <a-box position="-1 4 -3" rotation="0 45 0" color="#4CC3D9">
@@ -135,6 +142,8 @@
                height="4"
                color="#7BC8A4">
       </a-plane>
+      <a-entity qr-space-controller="qrid: {{ qrcode.id }}">
+      </a-entity>
       <a-entity my-note="text: Check oil level; color: #2a2a4e"
                 position="0 1 -2"
                 look-at="#camera">
