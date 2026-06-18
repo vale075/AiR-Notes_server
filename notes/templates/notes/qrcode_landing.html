@@ -107,6 +107,10 @@
         <p style="font-size: 0.85rem; color: #555;">
           Connecté en tant que <strong>{{ user.username }}</strong>
         </p>
+        <p id="ml-detected-msg"
+           style="font-size: 0.85rem;
+                  color: #555;
+                  display: none">Magic Leaps detected</p>
         <a href="{% url 'logout' %}?next={{ request.path }}" class="btn-auth">Se déconnecter</a>
       {% else %}
         <a href="{{ login }}" class="btn-auth">Se connecter</a>
@@ -132,27 +136,26 @@
                  text="color: black; align: center">
         </a-mixin>
       </a-assets>
+      <a-entity id="leftHand" hand-tracking-controls="hand: left;">
+      </a-entity>
+      <a-entity id="rightHand" hand-tracking-controls="hand: right;">
+        <a-entity collider-check
+                  raycaster="objects: .collidable; showLine:true;"
+                  position="0 0 0"
+                  rotation="-30 -25 0">
+          <a-sphere custom-cursor color="white" radius=".05" position="0 0 -1">
+          </a-entity>
+        </a-circle>
+      </a-entity>
       <a-sky hide-on-enter-ar color="#c2ffe8">
       </a-sky>
-      <a-box position="-1 4 -3" rotation="0 45 0" color="#4CC3D9">
-      </a-box>
-      <a-plane position="0 0 -4"
-               rotation="-90 0 0"
-               width="4"
-               height="4"
-               color="#7BC8A4">
-      </a-plane>
-      <a-entity qr-space-controller="qrid: {{ qrcode.id }}">
+      <a-entity qr-space-controller="qrid: {{ qrcode.id }}" position="0 0 -2">
       </a-entity>
       <a-entity my-note="text: Check oil level; color: #2a2a4e"
                 position="0 1 -2"
                 look-at="#camera">
       </a-entity>
       <a-entity id="camera" camera wasd-controls look-controls>
-        <a-entity geometry="primitive: plane; height: 0.2; width: 0.2"
-                  position="0 0 -1"
-                  material="color: gray; opacity: 0.5">
-        </a-entity>
       </a-entity>
     </a-scene>
   </body>
@@ -180,5 +183,56 @@
         sceneEl.enterAR();
       }
     });
+
+    // Helper to unhide the Magic Leap notice
+    function showMagicLeapMessage() {
+      const msgElement = document.getElementById('ml-detected-msg');
+      if (msgElement) {
+        msgElement.style.display = 'block';
+      }
+    }
+
+    // Function to detect if the user is using a Magic Leap 2 device
+    function checkDevice() {
+      // Direct client-side User-Agent string fallback verification check
+      const ua = navigator.userAgent;
+      if (/MagicLeap|Magic Leap|Wolvic/i.test(ua)) {
+        console.log("Magic Leap detected via standard User Agent verification!");
+        showMagicLeapMessage();
+        return;
+      }
+
+      // Modern asynchronous client hint checks if supported natively
+      if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === 'function') {
+        navigator.userAgentData.getHighEntropyValues(['model'])
+          .then(uaData => {
+            if (uaData.model === "Magic Leap 2") {
+              console.log("Magic Leap 2 detected via High Entropy Client Hints!");
+              showMagicLeapMessage();
+            }
+          }).catch(err => console.error(err));
+      }
+
+      // Fallback architecture Client-Hints network loop check
+      fetch("/", {
+          headers: {
+            "Sec-Fetch-Site": "same-origin",
+            "Accept-CH": "Sec-CH-UA-Model"
+          }
+        })
+        .then(response => {
+          const model = response.headers.get("sec-ch-ua-model");
+          if (model && model === "Magic Leap 2") {
+            console.log("You are using a Magic Leap 2 device!");
+            showMagicLeapMessage();
+          }
+        })
+        .catch(error => {
+          console.error("Network device checking assertion error:", error);
+        });
+    }
+
+    // Run the device validation check on system entry
+    checkDevice();
   </script>
 </html>

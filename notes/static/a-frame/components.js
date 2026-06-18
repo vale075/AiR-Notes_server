@@ -406,3 +406,19 @@ AFRAME.registerComponent('arrnote', {
         // cleanup when component is removed
     }
 });
+
+
+// Component to change to a sequential color on click.
+AFRAME.registerComponent('custom-cursor', {
+    init: function () {
+        const el = this.el;
+
+        const handEl = document.querySelector("#rightHand");
+        handEl.addEventListener('pinchstarted', function () {
+            el.setAttribute('color', "yellow");
+        })
+        handEl.addEventListener('pinchended', function () {
+            el.setAttribute('color', "white");
+        })
+    }
+});
