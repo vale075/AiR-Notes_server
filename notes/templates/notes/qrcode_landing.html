@@ -90,6 +90,7 @@
     </style>
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script src="https://unpkg.com/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-rounded@1.0.3/dist/aframe-rounded-component.min.js"></script>
     <script src="{% static "a-frame/components.js" %}"></script>
   </head>
   <body>
@@ -128,7 +129,8 @@
                     position: absolute;
                     top: 0;
                     left: 0;
-                    z-index: 10">
+                    z-index: 10"
+             ar-hit-test="target:#ar-cursor">
       <a-assets>
         <a-mixin id="txtnote"
                  geometry="primitive: plane; height: 0; width: 0"
@@ -143,9 +145,7 @@
                   raycaster="objects: .collidable; showLine:true;"
                   position="0 0 0"
                   rotation="-30 -25 0">
-          <a-sphere custom-cursor color="white" radius=".05" position="0 0 -1">
-          </a-entity>
-        </a-circle>
+        </a-entity>
       </a-entity>
       <a-cursor id="mobileTouchHandler"
                 raycaster="objects: .collidable"
@@ -153,9 +153,23 @@
       </a-cursor>
       <a-sky hide-on-enter-ar color="#c2ffe8">
       </a-sky>
+      <a-sphere id="ar-cursor"
+                custom-cursor
+                hide-on-enter-ar
+                color="white"
+                radius=".05"
+                opacity=".5">
+      </a-sphere>
       <a-entity anchored
                 qr-space-controller="qrid: {{ qrcode.id }}"
-                position="0 0 -2">
+                position="0 0 -2"
+                visible="false">
+        <a-cone radius-bottom=".1">
+        </a-cone>
+        <a-cone radius-bottom=".1" color="yellow", rotation="90 0 0">
+        </a-cone>
+        <a-entity id="notes" visible="true">
+        </a-entity>
       </a-entity>
       <a-entity id="camera" camera wasd-controls look-controls>
       </a-entity>
@@ -169,6 +183,7 @@
              color="yellow"
              change-color-on-click>
       </a-box>
+      {# djlint:off H025 #}
     </a-scene>
   </body>
   <script>

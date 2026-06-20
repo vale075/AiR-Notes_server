@@ -169,6 +169,61 @@ AFRAME.registerComponent('qr-space-controller', {
 
     init: function () {
         this.currentQrId = this.data.qrid;
+
+        const arCursorEl = document.querySelector("#ar-cursor");
+
+        const targetPosition = new THREE.Vector3();
+        const surfaceNormal = new THREE.Vector3();
+        const cameraPosition = new THREE.Vector3();
+        const rotationMatrix = new THREE.Matrix4();
+        const xAxis = new THREE.Vector3();
+        const yAxis = new THREE.Vector3();
+
+        this.el.sceneEl.addEventListener("ar-hit-test-select", (event) => {
+            const { position, orientation } = event.detail;
+
+            // 1. Position
+            this.el.object3D.position.set(position.x, position.y, position.z);
+
+            // 2. Surface normal — derived correctly from the hit pose's quaternion.
+            // Per the WebXR hit-test spec, the Y axis of that quaternion's local frame
+            // is defined to align with the surface normal; orientation.x/y/z alone is
+            // not a usable direction.
+            const hitQuaternion = new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w);
+            surfaceNormal.set(0, 1, 0).applyQuaternion(hitQuaternion).normalize();
+
+            // 3. Camera world position
+            const cameraEl = this.el.sceneEl.camera;
+            cameraEl.getWorldPosition(cameraPosition);
+
+            let tempUp = new THREE.Vector3(0, 1, 0);
+
+            if (Math.abs(surfaceNormal.y) > 0.9) {
+                // Floor/ceiling: derive "up" from camera POSITION relative to the hit
+                // point, not camera orientation — the hit-test ray can land off-center
+                // from where the camera is actually pointed.
+                const hitPosition = new THREE.Vector3(position.x, position.y, position.z);
+                const awayFromCamera = hitPosition.clone().sub(cameraPosition);
+                awayFromCamera.projectOnPlane(surfaceNormal);
+
+                // Degenerate case: tapping almost directly below the camera leaves a
+                // near-zero horizontal component — normalizing that gives NaN. Fall
+                // back to a fixed world direction instead.
+                if (awayFromCamera.lengthSq() < 1e-6) {
+                    awayFromCamera.set(0, 0, -1).projectOnPlane(surfaceNormal);
+                }
+                tempUp.copy(awayFromCamera.normalize());
+            }
+
+            // 4-7. Build the orthonormal basis — unchanged, this part was already correct
+            xAxis.crossVectors(tempUp, surfaceNormal).normalize();
+            yAxis.crossVectors(surfaceNormal, xAxis).normalize();
+            rotationMatrix.makeBasis(xAxis, yAxis, surfaceNormal);
+
+            this.el.object3D.quaternion.setFromRotationMatrix(rotationMatrix);
+            this.el.object3D.visible = true;
+        });
+
         if (!this.currentQrId) {
             console.error("No QRCode id was passed !");
             throw error;
@@ -182,24 +237,25 @@ AFRAME.registerComponent('qr-space-controller', {
     loadSceneNotes: async function () {
         try {
             const notes = await noteService.getNotesForQRCode(this.currentQrId);
+            const notesEl = document.querySelector("#notes");
             for (const note of notes) {
                 switch (note.note_type) {
                     case 'TXT': {
                         const el = document.createElement('a-entity');
                         el.setAttribute('txtnote', note);
-                        this.el.appendChild(el);
+                        notesEl.appendChild(el);
                         break;
                     }
                     case 'IMA': {
                         const el = document.createElement('a-image');
                         el.setAttribute('imgnote', note);
-                        this.el.appendChild(el);
+                        notesEl.appendChild(el);
                         break;
                     }
                     case 'ARR': {
                         const el = document.createElement('a-entity');
                         el.setAttribute('arrnote', note);
-                        this.el.appendChild(el);
+                        notesEl.appendChild(el);
                         break;
                     }
                     default:
