@@ -147,16 +147,28 @@
           </a-entity>
         </a-circle>
       </a-entity>
+      <a-cursor id="mobileTouchHandler"
+                raycaster="objects: .collidable"
+                cursor="rayOrigin: mouse">
+      </a-cursor>
       <a-sky hide-on-enter-ar color="#c2ffe8">
       </a-sky>
-      <a-entity qr-space-controller="qrid: {{ qrcode.id }}" position="0 0 -2">
-      </a-entity>
-      <a-entity my-note="text: Check oil level; color: #2a2a4e"
-                position="0 1 -2"
-                look-at="#camera">
+      <a-entity anchored
+                qr-space-controller="qrid: {{ qrcode.id }}"
+                position="0 0 -2">
       </a-entity>
       <a-entity id="camera" camera wasd-controls look-controls>
       </a-entity>
+      <a-box class="collidable"
+             position="0 1 -2"
+             color="yellow"
+             change-color-on-click>
+      </a-box>
+      <a-box class="collidable"
+             position="0 1 -3"
+             color="yellow"
+             change-color-on-click>
+      </a-box>
     </a-scene>
   </body>
   <script>
@@ -193,13 +205,13 @@
     }
 
     // Function to detect if the user is using a Magic Leap 2 device
-    function checkDevice() {
+    function checkMagicLeap() {
       // Direct client-side User-Agent string fallback verification check
       const ua = navigator.userAgent;
       if (/MagicLeap|Magic Leap|Wolvic/i.test(ua)) {
         console.log("Magic Leap detected via standard User Agent verification!");
         showMagicLeapMessage();
-        return;
+        return true;
       }
 
       // Modern asynchronous client hint checks if supported natively
@@ -209,6 +221,7 @@
             if (uaData.model === "Magic Leap 2") {
               console.log("Magic Leap 2 detected via High Entropy Client Hints!");
               showMagicLeapMessage();
+              return true;
             }
           }).catch(err => console.error(err));
       }
@@ -225,14 +238,76 @@
           if (model && model === "Magic Leap 2") {
             console.log("You are using a Magic Leap 2 device!");
             showMagicLeapMessage();
+            return true;
           }
         })
         .catch(error => {
           console.error("Network device checking assertion error:", error);
         });
+      return false;
     }
 
-    // Run the device validation check on system entry
-    checkDevice();
+    function setupTapToSelect() {
+      sceneEl.addEventListener('enter-vr', () => {
+        const session = sceneEl.renderer.xr.getSession();
+        if (!session) return;
+        session.addEventListener('select', onTapSelect);
+      });
+
+      sceneEl.addEventListener('exit-vr', () => {
+        const session = sceneEl.renderer.xr.getSession();
+        if (session) session.removeEventListener('select', onTapSelect);
+      });
+    }
+
+    function onTapSelect(event) {
+      const frame = event.frame;
+      const referenceSpace = sceneEl.renderer.xr.getReferenceSpace();
+      const pose = frame.getPose(event.inputSource.targetRaySpace, referenceSpace);
+      if (!pose) return;
+
+      const {
+        position,
+        orientation
+      } = pose.transform;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.ray.origin.set(position.x, position.y, position.z);
+      raycaster.ray.direction
+        .set(0, 0, -1)
+        .applyQuaternion(new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w));
+
+      const collidableObjects = Array.from(document.querySelectorAll('.collidable')).map(el => el.object3D);
+      const intersects = raycaster.intersectObjects(collidableObjects, true);
+
+      if (intersects.length > 0) {
+        let hit = intersects[0].object;
+        while (hit && !hit.el) hit = hit.parent;
+        if (hit && hit.el) hit.el.emit('click', {
+          intersection: intersects[0]
+        }, false);
+      }
+    }
+
+    function setupAdaptiveControls() {
+      const leftHand = document.getElementById('leftHand');
+      const rightHand = document.getElementById('rightHand');
+      const mobileTouchHandler = document.getElementById('mobileTouchHandler');
+
+      if (!checkMagicLeap()) {
+        console.log("Mobile phone detected. Setting up tap-to-select.");
+
+        if (leftHand) leftHand.setAttribute('visible', 'false');
+        if (rightHand) rightHand.setAttribute('visible', 'false');
+        if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false'); // not used in AR session
+
+      } else {
+        if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false');
+      }
+    }
+
+
+    setupTapToSelect();
+    setupAdaptiveControls();
   </script>
 </html>

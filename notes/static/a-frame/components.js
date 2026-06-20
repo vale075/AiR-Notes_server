@@ -422,3 +422,18 @@ AFRAME.registerComponent('custom-cursor', {
         })
     }
 });
+
+AFRAME.registerComponent('change-color-on-click', {
+    init: function () {
+        const el = this.el;
+
+        // Listen for the tap/click event
+        el.addEventListener('click', function () {
+            // Generate a random color hex string
+            const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+
+            // Change the target entity's color attribute
+            el.setAttribute('material', 'color', randomColor);
+        });
+    }
+});
