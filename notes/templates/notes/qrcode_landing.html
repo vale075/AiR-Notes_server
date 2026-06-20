@@ -87,6 +87,13 @@
         background-color: #eee;
         color: #2d3436;
       }
+
+      /* Long-press-to-drag needs raw touch events; without this, holding a
+         finger down can trigger the browser's text-selection magnifier or
+         pull-to-refresh instead of reaching our select handlers. */
+      a-scene canvas {
+        touch-action: none;
+      }
     </style>
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script src="https://unpkg.com/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
@@ -262,46 +269,190 @@
       return false;
     }
 
-    function setupTapToSelect() {
-      sceneEl.addEventListener('enter-vr', () => {
-        const session = sceneEl.renderer.xr.getSession();
-        if (!session) return;
-        session.addEventListener('select', onTapSelect);
-      });
+    // -------------------------------------------------------------------
+    // Unified select / long-press-drag / ar-hit-test gating
+    // -------------------------------------------------------------------
+    // ar-hit-test is A-Frame's own scene component (it places real-world
+    // surface hits). It runs its own independent 'select' listener on the
+    // XR session, so rather than racing it, we arm/disarm it via its
+    // documented `enabled` toggle the instant we know a gesture's real ray
+    // — at selectstart / pinchstarted — well before its own listener for
+    // that same gesture ever runs.
 
-      sceneEl.addEventListener('exit-vr', () => {
-        const session = sceneEl.renderer.xr.getSession();
-        if (session) session.removeEventListener('select', onTapSelect);
-      });
+    const LONG_PRESS_MS = 500;
+
+    let pressTimer = null;
+    let pressInputSource = null;
+    let pressStartEl = null;
+    let isDragging = false;
+    let dragEl = null;
+    let dragDistance = 0;
+    let pinchHitEl = null;
+
+    function gateArHitTest(hitFound) {
+      const arHitTest = sceneEl.components['ar-hit-test'];
+      if (arHitTest && arHitTest.data.enabled === hitFound) {
+        sceneEl.setAttribute('ar-hit-test', 'enabled', !hitFound);
+      }
     }
 
-    function onTapSelect(event) {
-      const frame = event.frame;
+    function getRayFromInputSource(inputSource, frame) {
       const referenceSpace = sceneEl.renderer.xr.getReferenceSpace();
-      const pose = frame.getPose(event.inputSource.targetRaySpace, referenceSpace);
-      if (!pose) return;
-
+      const pose = frame.getPose(inputSource.targetRaySpace, referenceSpace);
+      if (!pose) return null;
       const {
         position,
         orientation
       } = pose.transform;
+      const origin = new THREE.Vector3(position.x, position.y, position.z);
+      const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(
+        new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
+      );
+      return {
+        origin,
+        direction
+      };
+    }
 
+    function getRightHandPointerPose() {
+      const pointerEl = document.querySelector('#rightHand [collider-check]');
+      if (!pointerEl) return null;
+      const origin = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      pointerEl.object3D.getWorldPosition(origin);
+      pointerEl.object3D.getWorldQuaternion(quaternion);
+      const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion);
+      return {
+        origin,
+        direction
+      };
+    }
+
+    function raycastCollidables(origin, direction) {
       const raycaster = new THREE.Raycaster();
-      raycaster.ray.origin.set(position.x, position.y, position.z);
-      raycaster.ray.direction
-        .set(0, 0, -1)
-        .applyQuaternion(new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w));
+      raycaster.ray.origin.copy(origin);
+      raycaster.ray.direction.copy(direction);
+      const objects = Array.from(document.querySelectorAll('.collidable')).map(el => el.object3D);
+      const intersects = raycaster.intersectObjects(objects, true);
+      if (intersects.length === 0) return null;
+      let hit = intersects[0].object;
+      while (hit && !hit.el) hit = hit.parent;
+      if (!hit || !hit.el) return null;
+      return {
+        el: hit.el,
+        distance: intersects[0].distance
+      };
+    }
 
-      const collidableObjects = Array.from(document.querySelectorAll('.collidable')).map(el => el.object3D);
-      const intersects = raycaster.intersectObjects(collidableObjects, true);
+    function dragLoop(time, frame) {
+      if (!isDragging) return; // stops the loop
+      const session = sceneEl.renderer.xr.getSession();
+      if (!session) return;
 
-      if (intersects.length > 0) {
-        let hit = intersects[0].object;
-        while (hit && !hit.el) hit = hit.parent;
-        if (hit && hit.el) hit.el.emit('click', {
-          intersection: intersects[0]
-        }, false);
+      if (pressInputSource && dragEl) {
+        const ray = getRayFromInputSource(pressInputSource, frame);
+        if (ray) {
+          const newPos = ray.origin.clone().add(ray.direction.clone().multiplyScalar(dragDistance));
+          dragEl.object3D.position.copy(newPos);
+        }
       }
+
+      session.requestAnimationFrame(dragLoop);
+    }
+
+    function onSelectStart(event) {
+      const ray = getRayFromInputSource(event.inputSource, event.frame);
+      if (!ray) return;
+
+      const hit = raycastCollidables(ray.origin, ray.direction);
+      gateArHitTest(!!hit); // disarm ar-hit-test only for gestures that actually touched a virtual object
+
+      if (!hit) return; // nothing virtual here — ar-hit-test handles the real-world placement
+
+      pressInputSource = event.inputSource;
+      pressStartEl = hit.el;
+      dragDistance = hit.distance;
+
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        isDragging = true;
+        dragEl = pressStartEl;
+        dragEl.emit('drag-start', {}, false);
+        if (navigator.vibrate) navigator.vibrate(40); // optional haptic cue, not all browsers support it
+
+        const session = sceneEl.renderer.xr.getSession();
+        if (session) session.requestAnimationFrame(dragLoop);
+      }, LONG_PRESS_MS);
+    }
+
+    function onSelectEnd() {
+      if (isDragging) {
+        dragEl.emit('drag-end', {}, false);
+        isDragging = false;
+        dragEl = null;
+      } else if (pressTimer) {
+        // Released before the long-press threshold -> treat it as a normal tap
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        if (pressStartEl) pressStartEl.emit('click', {}, false);
+      }
+      pressInputSource = null;
+      pressStartEl = null;
+    }
+
+    function cancelPress() {
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+      if (isDragging && dragEl) dragEl.emit('drag-end', {}, false);
+      isDragging = false;
+      dragEl = null;
+      pressStartEl = null;
+      pressInputSource = null;
+    }
+
+    function setupMobileSelect() {
+      sceneEl.addEventListener('enter-vr', () => {
+        const session = sceneEl.renderer.xr.getSession();
+        if (!session) return;
+        session.addEventListener('selectstart', onSelectStart);
+        session.addEventListener('selectend', onSelectEnd);
+        // Safety net: if the touch input source is removed mid-gesture
+        // (selectend can be missed on some Android/Chrome builds), clean up anyway.
+        session.addEventListener('inputsourceschange', (e) => {
+          if (pressInputSource && (e.removed || []).includes(pressInputSource)) {
+            cancelPress();
+          }
+        });
+      });
+
+      sceneEl.addEventListener('exit-vr', () => {
+        const session = sceneEl.renderer.xr.getSession();
+        if (session) {
+          session.removeEventListener('selectstart', onSelectStart);
+          session.removeEventListener('selectend', onSelectEnd);
+        }
+        cancelPress();
+      });
+    }
+
+    function setupHandTrackingSelect() {
+      const handEl = document.querySelector('#rightHand');
+      if (!handEl) return;
+
+      handEl.addEventListener('pinchstarted', () => {
+        const pose = getRightHandPointerPose();
+        if (!pose) return;
+        const hit = raycastCollidables(pose.origin, pose.direction);
+        gateArHitTest(!!hit);
+        pinchHitEl = hit ? hit.el : null;
+      });
+
+      handEl.addEventListener('pinchended', () => {
+        if (pinchHitEl) pinchHitEl.emit('click', {}, false);
+        pinchHitEl = null;
+      });
     }
 
     function setupAdaptiveControls() {
@@ -310,19 +461,22 @@
       const mobileTouchHandler = document.getElementById('mobileTouchHandler');
 
       if (!checkMagicLeap()) {
-        console.log("Mobile phone detected. Setting up tap-to-select.");
+        console.log("Mobile phone detected. Setting up tap / long-press-to-drag.");
 
         if (leftHand) leftHand.setAttribute('visible', 'false');
         if (rightHand) rightHand.setAttribute('visible', 'false');
         if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false'); // not used in AR session
 
+        setupMobileSelect();
       } else {
+        console.log("Magic Leap 2 detected. Setting up pinch-to-select.");
+
         if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false');
+
+        setupHandTrackingSelect();
       }
     }
 
-
-    setupTapToSelect();
     setupAdaptiveControls();
   </script>
 </html>
