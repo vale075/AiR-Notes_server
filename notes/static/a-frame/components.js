@@ -173,6 +173,7 @@ AFRAME.registerComponent('qr-space-controller', {
         const validateBtnEl = document.querySelector("#uiBtn");
         const uiTxtEl = document.querySelector("#uiTxt");
         const qrMarkerEl = document.querySelector("#qrMarker");
+        const qrUiEl = document.querySelector("#qrUi");
         this.notesEl = document.querySelector("#notes");
 
         const targetPosition = new THREE.Vector3();
@@ -235,8 +236,15 @@ AFRAME.registerComponent('qr-space-controller', {
             validateBtnEl.object3D.visible = false;
             uiTxtEl.object3D.visible = false;
             qrMarkerEl.object3D.visible = false;
+            qrUiEl.object3D.visible = true;
             this.notesEl.object3D.visible = true;
         });
+
+        const closeNoteBtnEl = document.querySelector("#closeNoteBtn");
+
+        closeNoteBtnEl.addEventListener("click", (event) => {
+            location.reload();
+        })
 
         if (!this.currentQrId) {
             console.error("No QRCode id was passed !");

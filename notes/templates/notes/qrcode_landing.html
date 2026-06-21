@@ -188,7 +188,8 @@
                 hide-on-enter-ar
                 color="white"
                 radius=".05"
-                opacity=".5">
+                opacity=".5"
+                material="depthWrite: false">
       </a-sphere>
       <a-entity anchored
                 qr-space-controller="qrid: {{ qrcode.id }}"
@@ -203,6 +204,17 @@
           </a-entity>
           <a-sphere radius=".03" color="black">
           </a-sphere>
+        </a-entity>
+        <a-entity id="qrUi" visible="false">
+          <a-entity id="closeNoteBtn"
+                    class="collidable"
+                    text="value: X; align: center; wrapCount: 25"
+                    geometry="primitive: circle; radius: .05"
+                    material="color: blue"
+                    event-set__mouseenter="material.color: red"
+                    event-set__click="material.color: red"
+                    event-set__mouseleave="material.color: blue">
+          </a-entity>
         </a-entity>
         <a-entity id="notes" visible="false">
         </a-entity>
