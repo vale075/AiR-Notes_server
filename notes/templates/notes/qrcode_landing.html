@@ -111,434 +111,443 @@
         <div class="private-notice">🔒 Ce QRCode et ses notes sont privés. Vous n'avez pas l'autorisation d'y accéder.</div>
       {% endif %}
       <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 20px;">
-      {% if user.is_authenticated %}
-        <p style="font-size: 0.85rem; color: #555;">
-          Connecté en tant que <strong>{{ user.username }}</strong>
-        </p>
-        <p id="ml-detected-msg"
-           style="font-size: 0.85rem;
-                  color: #555;
-                  display: none">Magic Leaps detected</p>
-        <a href="{% url 'logout' %}?next={{ request.path }}" class="btn-auth">Se déconnecter</a>
-      {% else %}
-        <a href="{{ login }}" class="btn-auth">Se connecter</a>
-      {% endif %}
-    </div>
-    <a-scene renderer="alpha: true;"
-             embedded
-             webxr="mode: ar; requiredFeatures: hit-test; referenceSpaceType: local;"
-             xr-mode-ui="enabled: true; XRMode: ar"
-             vr-mode-ui="enabled: false"
-             style="background: transparent;
-                    display: none;
-                    width: 100%;
-                    height: 100%;
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    z-index: 10"
-             ar-hit-test="target:#ar-cursor">
-      <a-assets>
-        <a-mixin id="txtnote"
-                 geometry="primitive: plane; height: 0; width: 0"
-                 material="color: white; side: double; opacity: .5; transparent: true"
-                 text="width: 1; color: black; align: center">
-        </a-mixin>
-      </a-assets>
-      <a-entity id="camera" camera wasd-controls look-controls>
-        <a-entity id="headUI" position="0 0 -.5">
-          <a-text id="uiTxt"
-                  value="Cliquez sur le QRCode localiser les notes."
-                  align="center"
-                  width=".4">
-          </a-text>
-          <a-text id="uiBtn"
-                  class="collidable"
-                  value="Valider la position"
-                  align="center"
-                  width=".25"
-                  wrap-count="19"
-                  position="0 -.1 0"
-                  geometry="primitive:plane; width: 0; height: 0"
-                  material="color: blue"
-                  event-set__mouseenter="material.color: green"
-                  event-set__click="material.color: green"
-                  event-set__mouseleave="material.color: blue"
-                  visible="false">
-          </a-text>
-        </a-entity>
-      </a-entity>
-      <a-entity id="leftHand" hand-tracking-controls="hand: left;">
-      </a-entity>
-      <a-entity id="rightHand" hand-tracking-controls="hand: right;">
-        <a-entity collider-check
-                  raycaster="objects: .collidable; showLine:true;"
-                  position="0 0 0"
-                  rotation="-30 -25 0">
-        </a-entity>
-      </a-entity>
-      <a-cursor id="mobileTouchHandler"
-                raycaster="objects: .collidable"
-                cursor="rayOrigin: mouse">
-      </a-cursor>
-      <a-sky hide-on-enter-ar color="#c2ffe8">
-      </a-sky>
-      <a-sphere id="ar-cursor"
-                custom-cursor
-                hide-on-enter-ar
-                color="white"
-                radius=".05"
-                opacity="0"
-                material="depthWrite: false">
-      </a-sphere>
-      <a-entity id="coordinatesMarker" visible="false">
-        <a-entity arrow="end: 0 0 .3; color: red">
-        </a-entity>
-        <a-entity arrow="end: 0 .3 0; color: green">
-        </a-entity>
-        <a-entity arrow="end: .3 0 0; color: blue">
-        </a-entity>
-        <a-sphere radius=".03" color="black">
-        </a-sphere>
-      </a-entity>
-      <a-entity qr-space-controller="qrid: {{ qrcode.id }}"
-                position="0 0 -2"
+      <p style="font-size: 0.85rem; color: #555;">
+        Connecté en tant que <strong>
+        {% if user.is_authenticated %}
+          {{ user.username }}
+        {% else %}
+          Invité
+        {% endif %}
+      </strong>
+    </p>
+    {% if user.is_authenticated %}
+      <a href="{% url 'logout' %}?next={{ request.path }}" class="btn-auth">Se déconnecter</a>
+    {% else %}
+      <a href="{{ login }}" class="btn-auth">Se connecter</a>
+    {% endif %}
+    <p id="ml-detected-msg"
+       style="font-size: 0.85rem;
+              color: #555;
+              display: none">Magic Leaps detected</p>
+  </div>
+  <a-scene renderer="alpha: true;"
+           embedded
+           webxr="mode: ar; requiredFeatures: hit-test; referenceSpaceType: local;"
+           xr-mode-ui="enabled: true; XRMode: ar"
+           vr-mode-ui="enabled: false"
+           style="background: transparent;
+                  display: none;
+                  width: 100%;
+                  height: 100%;
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  z-index: 10"
+           ar-hit-test="target:#ar-cursor">
+    <a-assets>
+      <a-mixin id="txtnote"
+               geometry="primitive: plane; height: 0; width: 0"
+               material="color: white; side: double; opacity: .5; transparent: true"
+               text="width: 1; color: black; align: center">
+      </a-mixin>
+    </a-assets>
+    <a-entity id="camera" camera wasd-controls look-controls>
+      <a-entity id="headUI" position="0 0 -.5">
+        <a-text id="uiTxt"
+                value="Cliquez sur le QRCode localiser les notes."
+                align="center"
+                width=".4">
+        </a-text>
+        <a-text id="uiBtn"
+                class="collidable"
+                value="Valider la position"
+                align="center"
+                width=".25"
+                wrap-count="19"
+                position="0 -.1 0"
+                geometry="primitive:plane; width: 0; height: 0"
+                material="color: blue"
+                event-set__mouseenter="material.color: green"
+                event-set__click="material.color: green"
+                event-set__mouseleave="material.color: blue"
                 visible="false">
-        <a-entity id="qrUi" visible="false">
-          <a-entity id="closeNoteBtn"
-                    class="collidable"
-                    text="value: X; align: center; wrapCount: 25"
-                    geometry="primitive: circle; radius: .05"
-                    material="color: blue"
-                    event-set__mouseenter="material.color: red"
-                    event-set__click="material.color: red"
-                    event-set__mouseleave="material.color: blue">
-          </a-entity>
-          <a-entity id="newTxtNoteBtn"
-                    class="collidable"
-                    text="value: T; align: center; wrapCount: 25"
-                    geometry="primitive: circle; radius: .05"
-                    material="color: green"
-                    event-set__mouseenter="material.color: green"
-                    event-set__click="material.color: blue"
-                    event-set__mouseleave="material.color: green"
-                    position=".1 .1 0">
-          </a-entity>
-          <a-entity id="newImgNoteBtn"
-                    class="collidable"
-                    text="value: I; align: center; wrapCount: 25"
-                    geometry="primitive: circle; radius: .05"
-                    material="color: green"
-                    event-set__mouseenter="material.color: green"
-                    event-set__click="material.color: blue"
-                    event-set__mouseleave="material.color: green"
-                    position="0 .1 0">
-          </a-entity>
-          <a-entity id="newArrNoteBtn"
-                    class="collidable"
-                    text="value: A; align: center; wrapCount: 25"
-                    geometry="primitive: circle; radius: .05"
-                    material="color: green"
-                    event-set__mouseenter="material.color: green"
-                    event-set__click="material.color: blue"
-                    event-set__mouseleave="material.color: green"
-                    position="-.1 .1 0">
-          </a-entity>
+        </a-text>
+      </a-entity>
+    </a-entity>
+    <a-entity id="leftHand" hand-tracking-controls="hand: left;">
+    </a-entity>
+    <a-entity id="rightHand" hand-tracking-controls="hand: right;">
+      <a-entity collider-check
+                raycaster="objects: .collidable; showLine:true;"
+                position="0 0 0"
+                rotation="-30 -25 0">
+      </a-entity>
+    </a-entity>
+    <a-cursor id="mobileTouchHandler"
+              raycaster="objects: .collidable"
+              cursor="rayOrigin: mouse">
+    </a-cursor>
+    <a-sky hide-on-enter-ar color="#c2ffe8">
+    </a-sky>
+    <a-sphere id="ar-cursor"
+              custom-cursor
+              hide-on-enter-ar
+              color="white"
+              radius=".05"
+              opacity="0"
+              material="depthWrite: false">
+    </a-sphere>
+    <a-entity id="coordinatesMarker" visible="false">
+      <a-entity arrow="end: 0 0 .3; color: red">
+      </a-entity>
+      <a-entity arrow="end: 0 .3 0; color: green">
+      </a-entity>
+      <a-entity arrow="end: .3 0 0; color: blue">
+      </a-entity>
+      <a-sphere radius=".03" color="black">
+      </a-sphere>
+    </a-entity>
+    <a-entity qr-space-controller="qrid: {{ qrcode.id }}"
+              position="0 0 -2"
+              visible="false">
+      <a-entity id="qrUi" visible="false">
+        <a-entity id="closeNoteBtn"
+                  class="collidable"
+                  text="value: X; align: center; wrapCount: 25"
+                  geometry="primitive: circle; radius: .05"
+                  material="color: blue"
+                  event-set__mouseenter="material.color: red"
+                  event-set__click="material.color: red"
+                  event-set__mouseleave="material.color: blue">
         </a-entity>
-        <a-entity id="notes" visible="false">
+        <a-entity id="newTxtNoteBtn"
+                  class="collidable"
+                  text="value: T; align: center; wrapCount: 25"
+                  geometry="primitive: circle; radius: .05"
+                  material="color: green"
+                  event-set__mouseenter="material.color: green"
+                  event-set__click="material.color: blue"
+                  event-set__mouseleave="material.color: green"
+                  position=".1 .1 0"
+                  {% if not edit %}visible="false"{% endif %}>
+        </a-entity>
+        <a-entity id="newImgNoteBtn"
+                  class="collidable"
+                  text="value: I; align: center; wrapCount: 25"
+                  geometry="primitive: circle; radius: .05"
+                  material="color: green"
+                  event-set__mouseenter="material.color: green"
+                  event-set__click="material.color: blue"
+                  event-set__mouseleave="material.color: green"
+                  position="0 .1 0"
+                  {% if not edit %}visible="false"{% endif %}>
+        </a-entity>
+        <a-entity id="newArrNoteBtn"
+                  class="collidable"
+                  text="value: A; align: center; wrapCount: 25"
+                  geometry="primitive: circle; radius: .05"
+                  material="color: green"
+                  event-set__mouseenter="material.color: green"
+                  event-set__click="material.color: blue"
+                  event-set__mouseleave="material.color: green"
+                  position="-.1 .1 0"
+                  {% if not edit %}visible="false"{% endif %}>
         </a-entity>
       </a-entity>
-      {% comment %} <a-box class="collidable" position="0 1 -2" color="yellow" change-color-on-click>
+      <a-entity id="notes" visible="false">
+      </a-entity>
+    </a-entity>
+    {% comment %} <a-box class="collidable" position="0 1 -2" color="yellow" change-color-on-click>
       </a-box>
       <a-box class="collidable" position="0 1 -3" color="yellow" change-color-on-click>
-      </a-box> {% endcomment %}
-      {# djlint:off H025 #}
-    </a-scene>
-  </body>
-  <script>
-    const sceneEl = document.querySelector('a-scene');
+    </a-box> {% endcomment %}
+    {# djlint:off H025 #}
+  </a-scene>
+</body>
+<script>
+  const sceneEl = document.querySelector('a-scene');
 
-    // 1. Force the scene to pause as soon as it's loaded in the DOM
-    if (sceneEl.hasLoaded) {
+  // 1. Force the scene to pause as soon as it's loaded in the DOM
+  if (sceneEl.hasLoaded) {
+    sceneEl.pause();
+  } else {
+    sceneEl.addEventListener('loaded', function() {
       sceneEl.pause();
-    } else {
-      sceneEl.addEventListener('loaded', function() {
-        sceneEl.pause();
-      });
-    }
-
-    // 2. Handle the button click to wake up and launch AR
-    document.getElementById('start-ar-btn').addEventListener('click', function() {
-      if (sceneEl) {
-        // Make the scene visible
-        sceneEl.style.display = 'block';
-
-        // Wake up A-Frame systems and render loop
-        sceneEl.play();
-        sceneEl.resize(); // Or else it doesnt show at all
-        sceneEl.enterAR();
-      }
     });
+  }
 
-    // Helper to unhide the Magic Leap notice
-    function showMagicLeapMessage() {
-      const msgElement = document.getElementById('ml-detected-msg');
-      if (msgElement) {
-        msgElement.style.display = 'block';
-      }
+  // 2. Handle the button click to wake up and launch AR
+  document.getElementById('start-ar-btn').addEventListener('click', function() {
+    if (sceneEl) {
+      // Make the scene visible
+      sceneEl.style.display = 'block';
+
+      // Wake up A-Frame systems and render loop
+      sceneEl.play();
+      sceneEl.resize(); // Or else it doesnt show at all
+      sceneEl.enterAR();
+    }
+  });
+
+  // Helper to unhide the Magic Leap notice
+  function showMagicLeapMessage() {
+    const msgElement = document.getElementById('ml-detected-msg');
+    if (msgElement) {
+      msgElement.style.display = 'block';
+    }
+  }
+
+  // Function to detect if the user is using a Magic Leap 2 device
+  function checkMagicLeap() {
+    // Direct client-side User-Agent string fallback verification check
+    const ua = navigator.userAgent;
+    if (/MagicLeap|Magic Leap|Wolvic/i.test(ua)) {
+      console.log("Magic Leap detected via standard User Agent verification!");
+      showMagicLeapMessage();
+      return true;
     }
 
-    // Function to detect if the user is using a Magic Leap 2 device
-    function checkMagicLeap() {
-      // Direct client-side User-Agent string fallback verification check
-      const ua = navigator.userAgent;
-      if (/MagicLeap|Magic Leap|Wolvic/i.test(ua)) {
-        console.log("Magic Leap detected via standard User Agent verification!");
-        showMagicLeapMessage();
-        return true;
-      }
-
-      // Modern asynchronous client hint checks if supported natively
-      if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === 'function') {
-        navigator.userAgentData.getHighEntropyValues(['model'])
-          .then(uaData => {
-            if (uaData.model === "Magic Leap 2") {
-              console.log("Magic Leap 2 detected via High Entropy Client Hints!");
-              showMagicLeapMessage();
-              return true;
-            }
-          }).catch(err => console.error(err));
-      }
-
-      // Fallback architecture Client-Hints network loop check
-      fetch("/", {
-          headers: {
-            "Sec-Fetch-Site": "same-origin",
-            "Accept-CH": "Sec-CH-UA-Model"
-          }
-        })
-        .then(response => {
-          const model = response.headers.get("sec-ch-ua-model");
-          if (model && model === "Magic Leap 2") {
-            console.log("You are using a Magic Leap 2 device!");
+    // Modern asynchronous client hint checks if supported natively
+    if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === 'function') {
+      navigator.userAgentData.getHighEntropyValues(['model'])
+        .then(uaData => {
+          if (uaData.model === "Magic Leap 2") {
+            console.log("Magic Leap 2 detected via High Entropy Client Hints!");
             showMagicLeapMessage();
             return true;
           }
-        })
-        .catch(error => {
-          console.error("Network device checking assertion error:", error);
-        });
-      return false;
+        }).catch(err => console.error(err));
     }
 
-    // -------------------------------------------------------------------
-    // Unified select / long-press-drag / ar-hit-test gating
-    // -------------------------------------------------------------------
-    // ar-hit-test is A-Frame's own scene component (it places real-world
-    // surface hits). It runs its own independent 'select' listener on the
-    // XR session, so rather than racing it, we arm/disarm it via its
-    // documented `enabled` toggle the instant we know a gesture's real ray
-    // — at selectstart / pinchstarted — well before its own listener for
-    // that same gesture ever runs.
-
-    const LONG_PRESS_MS = 500;
-
-    let pressTimer = null;
-    let pressInputSource = null;
-    let pressStartEl = null;
-    let isDragging = false;
-    let dragEl = null;
-    let dragDistance = 0;
-    let pinchHitEl = null;
-
-    function gateArHitTest(hitFound) {
-      const arHitTest = sceneEl.components['ar-hit-test'];
-      if (arHitTest && arHitTest.data.enabled === hitFound) {
-        sceneEl.setAttribute('ar-hit-test', 'enabled', !hitFound);
-      }
-    }
-
-    function getRayFromInputSource(inputSource, frame) {
-      const referenceSpace = sceneEl.renderer.xr.getReferenceSpace();
-      const pose = frame.getPose(inputSource.targetRaySpace, referenceSpace);
-      if (!pose) return null;
-      const {
-        position,
-        orientation
-      } = pose.transform;
-      const origin = new THREE.Vector3(position.x, position.y, position.z);
-      const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(
-        new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
-      );
-      return {
-        origin,
-        direction
-      };
-    }
-
-    function getRightHandPointerPose() {
-      const pointerEl = document.querySelector('#rightHand [collider-check]');
-      if (!pointerEl) return null;
-      const origin = new THREE.Vector3();
-      const quaternion = new THREE.Quaternion();
-      pointerEl.object3D.getWorldPosition(origin);
-      pointerEl.object3D.getWorldQuaternion(quaternion);
-      const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion);
-      return {
-        origin,
-        direction
-      };
-    }
-
-    function raycastCollidables(origin, direction) {
-      const raycaster = new THREE.Raycaster();
-      raycaster.ray.origin.copy(origin);
-      raycaster.ray.direction.copy(direction);
-      const objects = Array.from(document.querySelectorAll('.collidable')).map(el => el.object3D);
-      const intersects = raycaster.intersectObjects(objects, true);
-      if (intersects.length === 0) return null;
-      let hit = intersects[0].object;
-      while (hit && !hit.el) hit = hit.parent;
-      if (!hit || !hit.el) return null;
-      return {
-        el: hit.el,
-        distance: intersects[0].distance
-      };
-    }
-
-    function dragLoop(time, frame) {
-      if (!isDragging) return; // stops the loop
-      const session = sceneEl.renderer.xr.getSession();
-      if (!session) return;
-
-      if (pressInputSource && dragEl) {
-        const ray = getRayFromInputSource(pressInputSource, frame);
-        if (ray) {
-          const newPos = ray.origin.clone().add(ray.direction.clone().multiplyScalar(dragDistance));
-          dragEl.object3D.position.copy(newPos);
+    // Fallback architecture Client-Hints network loop check
+    fetch("/", {
+        headers: {
+          "Sec-Fetch-Site": "same-origin",
+          "Accept-CH": "Sec-CH-UA-Model"
         }
-      }
+      })
+      .then(response => {
+        const model = response.headers.get("sec-ch-ua-model");
+        if (model && model === "Magic Leap 2") {
+          console.log("You are using a Magic Leap 2 device!");
+          showMagicLeapMessage();
+          return true;
+        }
+      })
+      .catch(error => {
+        console.error("Network device checking assertion error:", error);
+      });
+    return false;
+  }
 
-      session.requestAnimationFrame(dragLoop);
+  // -------------------------------------------------------------------
+  // Unified select / long-press-drag / ar-hit-test gating
+  // -------------------------------------------------------------------
+  // ar-hit-test is A-Frame's own scene component (it places real-world
+  // surface hits). It runs its own independent 'select' listener on the
+  // XR session, so rather than racing it, we arm/disarm it via its
+  // documented `enabled` toggle the instant we know a gesture's real ray
+  // — at selectstart / pinchstarted — well before its own listener for
+  // that same gesture ever runs.
+
+  const LONG_PRESS_MS = 500;
+
+  let pressTimer = null;
+  let pressInputSource = null;
+  let pressStartEl = null;
+  let isDragging = false;
+  let dragEl = null;
+  let dragDistance = 0;
+  let pinchHitEl = null;
+
+  function gateArHitTest(hitFound) {
+    const arHitTest = sceneEl.components['ar-hit-test'];
+    if (arHitTest && arHitTest.data.enabled === hitFound) {
+      sceneEl.setAttribute('ar-hit-test', 'enabled', !hitFound);
+    }
+  }
+
+  function getRayFromInputSource(inputSource, frame) {
+    const referenceSpace = sceneEl.renderer.xr.getReferenceSpace();
+    const pose = frame.getPose(inputSource.targetRaySpace, referenceSpace);
+    if (!pose) return null;
+    const {
+      position,
+      orientation
+    } = pose.transform;
+    const origin = new THREE.Vector3(position.x, position.y, position.z);
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(
+      new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
+    );
+    return {
+      origin,
+      direction
+    };
+  }
+
+  function getRightHandPointerPose() {
+    const pointerEl = document.querySelector('#rightHand [collider-check]');
+    if (!pointerEl) return null;
+    const origin = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    pointerEl.object3D.getWorldPosition(origin);
+    pointerEl.object3D.getWorldQuaternion(quaternion);
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion);
+    return {
+      origin,
+      direction
+    };
+  }
+
+  function raycastCollidables(origin, direction) {
+    const raycaster = new THREE.Raycaster();
+    raycaster.ray.origin.copy(origin);
+    raycaster.ray.direction.copy(direction);
+    const objects = Array.from(document.querySelectorAll('.collidable')).map(el => el.object3D);
+    const intersects = raycaster.intersectObjects(objects, true);
+    if (intersects.length === 0) return null;
+    let hit = intersects[0].object;
+    while (hit && !hit.el) hit = hit.parent;
+    if (!hit || !hit.el) return null;
+    return {
+      el: hit.el,
+      distance: intersects[0].distance
+    };
+  }
+
+  function dragLoop(time, frame) {
+    if (!isDragging) return; // stops the loop
+    const session = sceneEl.renderer.xr.getSession();
+    if (!session) return;
+
+    if (pressInputSource && dragEl) {
+      const ray = getRayFromInputSource(pressInputSource, frame);
+      if (ray) {
+        const newPos = ray.origin.clone().add(ray.direction.clone().multiplyScalar(dragDistance));
+        dragEl.object3D.position.copy(newPos);
+      }
     }
 
-    function onSelectStart(event) {
-      const ray = getRayFromInputSource(event.inputSource, event.frame);
-      if (!ray) return;
+    session.requestAnimationFrame(dragLoop);
+  }
 
-      const hit = raycastCollidables(ray.origin, ray.direction);
-      gateArHitTest(!!hit); // disarm ar-hit-test only for gestures that actually touched a virtual object
+  function onSelectStart(event) {
+    const ray = getRayFromInputSource(event.inputSource, event.frame);
+    if (!ray) return;
 
-      if (!hit) return; // nothing virtual here — ar-hit-test handles the real-world placement
+    const hit = raycastCollidables(ray.origin, ray.direction);
+    gateArHitTest(!!hit); // disarm ar-hit-test only for gestures that actually touched a virtual object
 
-      pressInputSource = event.inputSource;
-      pressStartEl = hit.el;
-      dragDistance = hit.distance;
+    if (!hit) return; // nothing virtual here — ar-hit-test handles the real-world placement
 
-      pressTimer = setTimeout(() => {
-        pressTimer = null;
-        isDragging = true;
-        dragEl = pressStartEl;
-        dragEl.emit('drag-start', {}, false);
-        if (navigator.vibrate) navigator.vibrate(40); // optional haptic cue, not all browsers support it
+    pressInputSource = event.inputSource;
+    pressStartEl = hit.el;
+    dragDistance = hit.distance;
 
-        const session = sceneEl.renderer.xr.getSession();
-        if (session) session.requestAnimationFrame(dragLoop);
-      }, LONG_PRESS_MS);
-    }
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      isDragging = true;
+      dragEl = pressStartEl;
+      dragEl.emit('drag-start', {}, false);
+      if (navigator.vibrate) navigator.vibrate(40); // optional haptic cue, not all browsers support it
 
-    function onSelectEnd() {
-      if (isDragging) {
-        dragEl.emit('drag-end', {}, false);
-        isDragging = false;
-        dragEl = null;
-      } else if (pressTimer) {
-        // Released before the long-press threshold -> treat it as a normal tap
-        clearTimeout(pressTimer);
-        pressTimer = null;
-        if (pressStartEl) pressStartEl.emit('click', {}, false);
-      }
-      pressInputSource = null;
-      pressStartEl = null;
-    }
+      const session = sceneEl.renderer.xr.getSession();
+      if (session) session.requestAnimationFrame(dragLoop);
+    }, LONG_PRESS_MS);
+  }
 
-    function cancelPress() {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-      }
-      if (isDragging && dragEl) dragEl.emit('drag-end', {}, false);
+  function onSelectEnd() {
+    if (isDragging) {
+      dragEl.emit('drag-end', {}, false);
       isDragging = false;
       dragEl = null;
-      pressStartEl = null;
-      pressInputSource = null;
+    } else if (pressTimer) {
+      // Released before the long-press threshold -> treat it as a normal tap
+      clearTimeout(pressTimer);
+      pressTimer = null;
+      if (pressStartEl) pressStartEl.emit('click', {}, false);
     }
+    pressInputSource = null;
+    pressStartEl = null;
+  }
 
-    function setupMobileSelect() {
-      sceneEl.addEventListener('enter-vr', () => {
-        const session = sceneEl.renderer.xr.getSession();
-        if (!session) return;
-        session.addEventListener('selectstart', onSelectStart);
-        session.addEventListener('selectend', onSelectEnd);
-        // Safety net: if the touch input source is removed mid-gesture
-        // (selectend can be missed on some Android/Chrome builds), clean up anyway.
-        session.addEventListener('inputsourceschange', (e) => {
-          if (pressInputSource && (e.removed || []).includes(pressInputSource)) {
-            cancelPress();
-          }
-        });
-      });
+  function cancelPress() {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+    if (isDragging && dragEl) dragEl.emit('drag-end', {}, false);
+    isDragging = false;
+    dragEl = null;
+    pressStartEl = null;
+    pressInputSource = null;
+  }
 
-      sceneEl.addEventListener('exit-vr', () => {
-        const session = sceneEl.renderer.xr.getSession();
-        if (session) {
-          session.removeEventListener('selectstart', onSelectStart);
-          session.removeEventListener('selectend', onSelectEnd);
+  function setupMobileSelect() {
+    sceneEl.addEventListener('enter-vr', () => {
+      const session = sceneEl.renderer.xr.getSession();
+      if (!session) return;
+      session.addEventListener('selectstart', onSelectStart);
+      session.addEventListener('selectend', onSelectEnd);
+      // Safety net: if the touch input source is removed mid-gesture
+      // (selectend can be missed on some Android/Chrome builds), clean up anyway.
+      session.addEventListener('inputsourceschange', (e) => {
+        if (pressInputSource && (e.removed || []).includes(pressInputSource)) {
+          cancelPress();
         }
-        cancelPress();
       });
-    }
+    });
 
-    function setupHandTrackingSelect() {
-      const handEl = document.querySelector('#rightHand');
-      if (!handEl) return;
-
-      handEl.addEventListener('pinchstarted', () => {
-        const pose = getRightHandPointerPose();
-        if (!pose) return;
-        const hit = raycastCollidables(pose.origin, pose.direction);
-        gateArHitTest(!!hit);
-        pinchHitEl = hit ? hit.el : null;
-      });
-
-      handEl.addEventListener('pinchended', () => {
-        if (pinchHitEl) pinchHitEl.emit('click', {}, false);
-        pinchHitEl = null;
-      });
-    }
-
-    function setupAdaptiveControls() {
-      const leftHand = document.getElementById('leftHand');
-      const rightHand = document.getElementById('rightHand');
-      const mobileTouchHandler = document.getElementById('mobileTouchHandler');
-
-      if (!checkMagicLeap()) {
-        console.log("Mobile phone detected. Setting up tap / long-press-to-drag.");
-
-        if (leftHand) leftHand.setAttribute('visible', 'false');
-        if (rightHand) rightHand.setAttribute('visible', 'false');
-        if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false'); // not used in AR session
-
-        setupMobileSelect();
-      } else {
-        console.log("Magic Leap 2 detected. Setting up pinch-to-select.");
-
-        if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false');
-
-        setupHandTrackingSelect();
+    sceneEl.addEventListener('exit-vr', () => {
+      const session = sceneEl.renderer.xr.getSession();
+      if (session) {
+        session.removeEventListener('selectstart', onSelectStart);
+        session.removeEventListener('selectend', onSelectEnd);
       }
-    }
+      cancelPress();
+    });
+  }
 
-    setupAdaptiveControls();
-  </script>
+  function setupHandTrackingSelect() {
+    const handEl = document.querySelector('#rightHand');
+    if (!handEl) return;
+
+    handEl.addEventListener('pinchstarted', () => {
+      const pose = getRightHandPointerPose();
+      if (!pose) return;
+      const hit = raycastCollidables(pose.origin, pose.direction);
+      gateArHitTest(!!hit);
+      pinchHitEl = hit ? hit.el : null;
+    });
+
+    handEl.addEventListener('pinchended', () => {
+      if (pinchHitEl) pinchHitEl.emit('click', {}, false);
+      pinchHitEl = null;
+    });
+  }
+
+  function setupAdaptiveControls() {
+    const leftHand = document.getElementById('leftHand');
+    const rightHand = document.getElementById('rightHand');
+    const mobileTouchHandler = document.getElementById('mobileTouchHandler');
+
+    if (!checkMagicLeap()) {
+      console.log("Mobile phone detected. Setting up tap / long-press-to-drag.");
+
+      if (leftHand) leftHand.setAttribute('visible', 'false');
+      if (rightHand) rightHand.setAttribute('visible', 'false');
+      if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false'); // not used in AR session
+
+      setupMobileSelect();
+    } else {
+      console.log("Magic Leap 2 detected. Setting up pinch-to-select.");
+
+      if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false');
+
+      setupHandTrackingSelect();
+    }
+  }
+
+  setupAdaptiveControls();
+</script>
 </html>
