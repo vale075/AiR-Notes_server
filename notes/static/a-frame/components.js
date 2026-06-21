@@ -170,7 +170,10 @@ AFRAME.registerComponent('qr-space-controller', {
     init: function () {
         this.currentQrId = this.data.qrid;
 
-        const arCursorEl = document.querySelector("#ar-cursor");
+        const validateBtnEl = document.querySelector("#uiBtn");
+        const uiTxtEl = document.querySelector("#uiTxt");
+        const qrMarkerEl = document.querySelector("#qrMarker");
+        this.notesEl = document.querySelector("#notes");
 
         const targetPosition = new THREE.Vector3();
         const surfaceNormal = new THREE.Vector3();
@@ -179,7 +182,7 @@ AFRAME.registerComponent('qr-space-controller', {
         const xAxis = new THREE.Vector3();
         const yAxis = new THREE.Vector3();
 
-        this.el.sceneEl.addEventListener("ar-hit-test-select", (event) => {
+        this.positionQRcode = (event) => {
             const { position, orientation } = event.detail;
 
             // 1. Position
@@ -222,6 +225,17 @@ AFRAME.registerComponent('qr-space-controller', {
 
             this.el.object3D.quaternion.setFromRotationMatrix(rotationMatrix);
             this.el.object3D.visible = true;
+            validateBtnEl.object3D.visible = true;
+        };
+
+        this.el.sceneEl.addEventListener("ar-hit-test-select", this.positionQRcode);
+
+        validateBtnEl.addEventListener("click", (event) => {
+            this.el.sceneEl.removeEventListener("ar-hit-test-select", this.positionQRcode);
+            validateBtnEl.object3D.visible = false;
+            uiTxtEl.object3D.visible = false;
+            qrMarkerEl.object3D.visible = false;
+            this.notesEl.object3D.visible = true;
         });
 
         if (!this.currentQrId) {
@@ -237,25 +251,24 @@ AFRAME.registerComponent('qr-space-controller', {
     loadSceneNotes: async function () {
         try {
             const notes = await noteService.getNotesForQRCode(this.currentQrId);
-            const notesEl = document.querySelector("#notes");
             for (const note of notes) {
                 switch (note.note_type) {
                     case 'TXT': {
                         const el = document.createElement('a-entity');
                         el.setAttribute('txtnote', note);
-                        notesEl.appendChild(el);
+                        this.notesEl.appendChild(el);
                         break;
                     }
                     case 'IMA': {
                         const el = document.createElement('a-image');
                         el.setAttribute('imgnote', note);
-                        notesEl.appendChild(el);
+                        this.notesEl.appendChild(el);
                         break;
                     }
                     case 'ARR': {
                         const el = document.createElement('a-entity');
                         el.setAttribute('arrnote', note);
-                        notesEl.appendChild(el);
+                        this.notesEl.appendChild(el);
                         break;
                     }
                     default:
@@ -268,7 +281,6 @@ AFRAME.registerComponent('qr-space-controller', {
         }
     }
 });
-
 
 AFRAME.registerComponent('txtnote', {
     schema: {
@@ -374,6 +386,89 @@ AFRAME.registerComponent('imgnote', {
 
     remove: function () {
         // cleanup when component is removed
+    }
+});
+
+/**
+   * <a-entity arrow="start: x y z; end: x y z; color: #ff0000; shaftRadius: 0.02; headRadius: 0.06; headLength: 0.15">
+   *
+   * Builds a cylinder (shaft) + cone (head) pointing from `start` to `end`.
+   * Coordinates are in the entity's local space (so you can also just move
+   * the parent entity around and keep start/end relative).
+   */
+AFRAME.registerComponent('arrow', {
+    schema: {
+        start: { type: 'vec3', default: { x: 0, y: 0, z: 0 } },
+        end: { type: 'vec3', default: { x: 0, y: 1, z: 0 } },
+        color: { type: 'color', default: '#ffffff' },
+        shaftRadius: { type: 'number', default: 0.02 },
+        headRadius: { type: 'number', default: 0.06 },
+        headLength: { type: 'number', default: 0.15 },
+        opacity: { type: 'number', default: 1 }
+    },
+
+    init: function () {
+        this.shaft = document.createElement('a-cylinder');
+        this.head = document.createElement('a-cone');
+        this.shaft.setAttribute('segments-radial', 12);
+        this.head.setAttribute('segments-radial', 12);
+        this.el.appendChild(this.shaft);
+        this.el.appendChild(this.head);
+    },
+
+    update: function () {
+        const data = this.data;
+        const start = new THREE.Vector3(data.start.x, data.start.y, data.start.z);
+        const end = new THREE.Vector3(data.end.x, data.end.y, data.end.z);
+
+        const fullVec = new THREE.Vector3().subVectors(end, start);
+        const totalLength = fullVec.length();
+
+        if (totalLength < 1e-6) {
+            // Degenerate arrow (start === end): hide geometry.
+            this.shaft.setAttribute('visible', false);
+            this.head.setAttribute('visible', false);
+            return;
+        }
+        this.shaft.setAttribute('visible', true);
+        this.head.setAttribute('visible', true);
+
+        const dir = fullVec.clone().normalize();
+
+        // Clamp head length so it never exceeds the full arrow length.
+        const headLength = Math.min(data.headLength, totalLength * 0.8);
+        const shaftLength = Math.max(totalLength - headLength, 0.0001);
+
+        // Default A-Frame cylinder/cone primitives are authored pointing
+        // along +Y, centered at their own origin. We rotate +Y onto `dir`.
+        const quaternion = new THREE.Quaternion().setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0),
+            dir
+        );
+
+        const shaftCenter = start.clone().addScaledVector(dir, shaftLength / 2);
+        const headBase = start.clone().addScaledVector(dir, shaftLength);
+        const headCenter = headBase.clone().addScaledVector(dir, headLength / 2);
+
+        this.shaft.setAttribute('radius', data.shaftRadius);
+        this.shaft.setAttribute('height', shaftLength);
+        this.shaft.setAttribute('color', data.color);
+        this.shaft.setAttribute('opacity', data.opacity);
+        this.shaft.object3D.position.copy(shaftCenter);
+        this.shaft.object3D.quaternion.copy(quaternion);
+
+        this.head.setAttribute('radius-bottom', data.headRadius);
+        this.head.setAttribute('radius-top', 0);
+        this.head.setAttribute('height', headLength);
+        this.head.setAttribute('color', data.color);
+        this.head.setAttribute('opacity', data.opacity);
+        this.head.object3D.position.copy(headCenter);
+        this.head.object3D.quaternion.copy(quaternion);
+    },
+
+    remove: function () {
+        if (this.shaft) this.shaft.remove();
+        if (this.head) this.head.remove();
     }
 });
 

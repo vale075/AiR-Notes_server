@@ -97,7 +97,7 @@
     </style>
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script src="https://unpkg.com/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
-    <script src="https://unpkg.com/aframe-rounded@1.0.3/dist/aframe-rounded-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-event-set-component@5.1.0/dist/aframe-event-set-component.min.js"></script>
     <script src="{% static "a-frame/components.js" %}"></script>
   </head>
   <body>
@@ -145,6 +145,29 @@
                  text="color: black; align: center">
         </a-mixin>
       </a-assets>
+      <a-entity id="camera" camera wasd-controls look-controls>
+        <a-entity id="headUI" position="0 0 -.5">
+          <a-text id="uiTxt"
+                  value="Cliquez sur le QRCode pour le localiser."
+                  align="center"
+                  width=".5">
+          </a-text>
+          <a-text id="uiBtn"
+                  class="collidable"
+                  value="Valider la position"
+                  align="center"
+                  width=".25"
+                  wrap-count="19"
+                  position="0 -.1 0"
+                  geometry="primitive:plane; width: 0; height: 0"
+                  material="color: blue"
+                  event-set__mouseenter="material.color: green"
+                  event-set__click="material.color: green"
+                  event-set__mouseleave="material.color: blue"
+                  visible="false">
+          </a-text>
+        </a-entity>
+      </a-entity>
       <a-entity id="leftHand" hand-tracking-controls="hand: left;">
       </a-entity>
       <a-entity id="rightHand" hand-tracking-controls="hand: right;">
@@ -171,14 +194,18 @@
                 qr-space-controller="qrid: {{ qrcode.id }}"
                 position="0 0 -2"
                 visible="false">
-        <a-cone radius-bottom=".1">
-        </a-cone>
-        <a-cone radius-bottom=".1" color="yellow", rotation="90 0 0">
-        </a-cone>
-        <a-entity id="notes" visible="true">
+        <a-entity id="qrMarker">
+          <a-entity arrow="end: 0 0 .3; color: red">
+          </a-entity>
+          <a-entity arrow="end: 0 .3 0; color: green">
+          </a-entity>
+          <a-entity arrow="end: .3 0 0; color: blue">
+          </a-entity>
+          <a-sphere radius=".03" color="black">
+          </a-sphere>
         </a-entity>
-      </a-entity>
-      <a-entity id="camera" camera wasd-controls look-controls>
+        <a-entity id="notes" visible="false">
+        </a-entity>
       </a-entity>
       <a-box class="collidable"
              position="0 1 -2"
