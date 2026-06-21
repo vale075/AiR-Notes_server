@@ -494,52 +494,10 @@ AFRAME.registerComponent('arrnote', {
         const el = this.el;
         const data = this.data;
 
-        el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        const pStart = new THREE.Vector3(data.pos_x, data.pos_y, data.pos_z);
+        const pEnd = new THREE.Vector3(data.pos2_x, data.pos2_y, data.pos2_z);
 
-        // 1. Convert inputs to Three.js Vectors for math operations
-        const pStart = new THREE.Vector3(0, 0, 0);
-        const pEnd = new THREE.Vector3(data.pos2_x - data.pos_x, data.pos2_y - data.pos_y, data.pos2_z - data.pos_z);
-
-        // 2. Calculate the main shaft direction and length
-        const direction = new THREE.Vector3().subVectors(pEnd, pStart).normalize();
-
-        // 3. Define arrowhead properties
-        const headLength = 0.3; // How long the arrow fins are
-        const headAngle = 0.35; // The spread angle of the fins (in radians)
-
-        // 4. Find an arbitrary perpendicular axis to rotate our fins around
-        // If the arrow points straight up/down, use X axis; otherwise use Y axis
-        const up = Math.abs(direction.y) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-        const right = new THREE.Vector3().crossVectors(direction, up).normalize();
-        const normalUp = new THREE.Vector3().crossVectors(right, direction).normalize();
-
-        // 5. Calculate fin vectors by rotating the inverted direction vector backwards
-        const invDir = direction.clone().negate();
-
-        // Fin 1: Rotated left
-        const finDir1 = invDir.clone().applyAxisAngle(right, headAngle).normalize().multiplyScalar(headLength);
-        // Fin 2: Rotated right
-        const finDir2 = invDir.clone().applyAxisAngle(right, -headAngle).normalize().multiplyScalar(headLength);
-        // Fin 3 & 4 (Optional but makes it look 3D from all sides): Rotated up and down
-        const finDir3 = invDir.clone().applyAxisAngle(normalUp, headAngle).normalize().multiplyScalar(headLength);
-        const finDir4 = invDir.clone().applyAxisAngle(normalUp, -headAngle).normalize().multiplyScalar(headLength);
-
-        // 6. Calculate absolute endpoints for the fins branching away from pEnd
-        const finEnd1 = pEnd.clone().add(finDir1);
-        const finEnd2 = pEnd.clone().add(finDir2);
-        const finEnd3 = pEnd.clone().add(finDir3);
-        const finEnd4 = pEnd.clone().add(finDir4);
-
-        // Helper function to format vectors for A-Frame strings
-        const fmt = (v) => `${v.x} ${v.y} ${v.z}`;
-
-        const color = "red";
-        // 7. Apply the multiple line components directly to your A-Frame entity
-        el.setAttribute('line', `start: ${fmt(pStart)}; end: ${fmt(pEnd)}; color: ${color}`);
-        el.setAttribute('line__fin1', `start: ${fmt(pEnd)}; end: ${fmt(finEnd1)}; color: ${color}`);
-        el.setAttribute('line__fin2', `start: ${fmt(pEnd)}; end: ${fmt(finEnd2)}; color: ${color}`);
-        el.setAttribute('line__fin3', `start: ${fmt(pEnd)}; end: ${fmt(finEnd3)}; color: ${color}`);
-        el.setAttribute('line__fin4', `start: ${fmt(pEnd)}; end: ${fmt(finEnd4)}; color: ${color}`);
+        el.setAttribute('arrow', { start: pStart, end: pEnd, color: "red" });
 
         if (this.init) {
             this.init = false;
