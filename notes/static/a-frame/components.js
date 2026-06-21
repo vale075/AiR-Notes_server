@@ -172,11 +172,10 @@ AFRAME.registerComponent('qr-space-controller', {
 
         const validateBtnEl = document.querySelector("#uiBtn");
         const uiTxtEl = document.querySelector("#uiTxt");
-        const qrMarkerEl = document.querySelector("#qrMarker");
+        const coordinatesMarkerEl = document.querySelector("#coordinatesMarker");
         const qrUiEl = document.querySelector("#qrUi");
         this.notesEl = document.querySelector("#notes");
 
-        const targetPosition = new THREE.Vector3();
         const surfaceNormal = new THREE.Vector3();
         const cameraPosition = new THREE.Vector3();
         const rotationMatrix = new THREE.Matrix4();
@@ -184,10 +183,15 @@ AFRAME.registerComponent('qr-space-controller', {
         const yAxis = new THREE.Vector3();
 
         this.positionQRcode = (event) => {
+            if (!this.elToMove) {
+                return;
+            }
             const { position, orientation } = event.detail;
 
             // 1. Position
-            this.el.object3D.position.set(position.x, position.y, position.z);
+            const hitPos = new THREE.Vector3();
+            this.elToMove.object3D.position.set(position.x, position.y, position.z);
+            coordinatesMarkerEl.object3D.position.set(position.x, position.y, position.z);
 
             // 2. Surface normal — derived correctly from the hit pose's quaternion.
             // Per the WebXR hit-test spec, the Y axis of that quaternion's local frame
@@ -224,26 +228,58 @@ AFRAME.registerComponent('qr-space-controller', {
             yAxis.crossVectors(surfaceNormal, xAxis).normalize();
             rotationMatrix.makeBasis(xAxis, yAxis, surfaceNormal);
 
-            this.el.object3D.quaternion.setFromRotationMatrix(rotationMatrix);
-            this.el.object3D.visible = true;
+            this.elToMove.object3D.quaternion.setFromRotationMatrix(rotationMatrix);
+            coordinatesMarkerEl.object3D.quaternion.setFromRotationMatrix(rotationMatrix);
+            if (this.elToMove != this.el) {
+                var worldToLocal = new THREE.Matrix4().copy(this.el.object3D.matrixWorld).invert();
+                this.elToMove.object3D.applyMatrix4(worldToLocal);
+            }
+
+            this.elToMove.object3D.visible = true;
+            coordinatesMarkerEl.object3D.visible = true;
             validateBtnEl.object3D.visible = true;
         };
 
+        this.elToMove = this.el;
         this.el.sceneEl.addEventListener("ar-hit-test-select", this.positionQRcode);
 
         validateBtnEl.addEventListener("click", (event) => {
-            this.el.sceneEl.removeEventListener("ar-hit-test-select", this.positionQRcode);
+            this.elToMove = false;
             validateBtnEl.object3D.visible = false;
             uiTxtEl.object3D.visible = false;
-            qrMarkerEl.object3D.visible = false;
+            coordinatesMarkerEl.object3D.visible = false;
             qrUiEl.object3D.visible = true;
             this.notesEl.object3D.visible = true;
-        });
+        }, { once: true });
 
         const closeNoteBtnEl = document.querySelector("#closeNoteBtn");
 
         closeNoteBtnEl.addEventListener("click", (event) => {
             location.reload();
+        })
+
+        const newTxtNoteBtnEL = document.querySelector("#newTxtNoteBtn");
+
+        newTxtNoteBtnEL.addEventListener("click", (event) => {
+            const el = document.createElement('a-entity');
+            el.setAttribute('visible', false);
+            el.setAttribute('txtnote', { qrcode_id: this.currentQrId, temporary: true });
+            this.notesEl.appendChild(el);
+
+            validateBtnEl.addEventListener("click", (event) => {
+                this.elToMove = false;
+                uiTxtEl.object3D.visible = false;
+                validateBtnEl.object3D.visible = false;
+                coordinatesMarkerEl.object3D.visible = false;
+                newTxtNoteBtnEL.emit('mouseleave', {}, false);
+                el.setAttribute('txtnote', 'temporary', false);
+            }, { once: true });
+
+            uiTxtEl.setAttribute('value', "Cliquez sur l'emplacement voulu");
+
+            this.elToMove = el;
+
+            uiTxtEl.object3D.visible = true;
         })
 
         if (!this.currentQrId) {
@@ -260,7 +296,11 @@ AFRAME.registerComponent('qr-space-controller', {
         try {
             const notes = await noteService.getNotesForQRCode(this.currentQrId);
             for (const note of notes) {
-                switch (note.note_type) {
+                delete note.updated_at;
+                delete note.created_at;
+                const note_type = note.note_type;
+                delete note.note_type;
+                switch (note_type) {
                     case 'TXT': {
                         const el = document.createElement('a-entity');
                         el.setAttribute('txtnote', note);
@@ -294,14 +334,16 @@ AFRAME.registerComponent('txtnote', {
     schema: {
         id: { type: 'string' },
         title: { type: 'string' },
-        content: { type: 'string' },
+        content: { type: 'string', default: "X" },
         pos_x: { type: 'number' },
         pos_y: { type: 'number' },
         pos_z: { type: 'number' },
         rot_x: { type: 'number' },
         rot_y: { type: 'number' },
         rot_z: { type: 'number' },
-        anchored: { type: 'boolean' }
+        anchored: { type: 'boolean', default: true },
+        qrcode_id: { type: 'string' },
+        temporary: { type: 'boolean', default: false }
     },
 
     init: function () {
@@ -310,29 +352,52 @@ AFRAME.registerComponent('txtnote', {
         this.init = true;
     },
 
-    update: function (oldData) {
+    update: async function (oldData) {
         // runs when schema properties change at runtime
         const el = this.el;
         const data = this.data;
 
-        el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        if (this.init) {
+            el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        } else {
+            const elPos = el.getAttribute('position');
+            el.setAttribute('txtnote', 'pos_x', elPos.x);
+            el.setAttribute('txtnote', 'pos_y', elPos.y);
+            el.setAttribute('txtnote', 'pos_z', elPos.z);
+        }
+        console.log("update ran");
         // let width = Math.min(data.content.length * .05 + .25, 5);
         // console.log(width)
-        // Width does not work...
-        el.setAttribute('text', { value: data.content, width: 10 });
+        el.setAttribute('text', { value: data.content });
+        if (this.init && data.anchored) {
+            el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z });
+        } else {
+            const elRot = el.getAttribute('rotation');
+            el.setAttribute('txtnote', 'rot_x', elRot.x);
+            el.setAttribute('txtnote', 'rot_y', elRot.y);
+            el.setAttribute('txtnote', 'rot_z', elRot.z);
+        }
         if (!data.anchored) {
             el.setAttribute('look-at', '#camera');
         }
         else {
             el.removeAttribute('look-at');
-            el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z })
         }
 
         if (this.init) {
             this.init = false;
         }
-        else {
-            noteService.updateTextNote(data.id, AFRAME.utils.diff(oldData, data));
+        else if (!data.temporary) {
+            if (data.id) {
+                noteService.updateTextNote(data.id, AFRAME.utils.diff(oldData, data));
+            } else {
+                try {
+                    const newnote = await noteService.createTextNote(data);
+                    this.el.setAttribute('txtnote', 'id', newnote.id);
+                } catch (err) {
+                    console.error('Failed to create text note:', err);
+                }
+            }
         }
     },
 
@@ -341,7 +406,7 @@ AFRAME.registerComponent('txtnote', {
     },
 
     remove: function () {
-        // cleanup when component is removed
+        noteService.deleteNote(this.data.id);
     }
 });
 
@@ -356,7 +421,8 @@ AFRAME.registerComponent('imgnote', {
         rot_x: { type: 'number' },
         rot_y: { type: 'number' },
         rot_z: { type: 'number' },
-        anchored: { type: 'boolean' }
+        anchored: { type: 'boolean' },
+        qrcode_id: { type: 'string' }
     },
 
     init: function () {
@@ -394,6 +460,7 @@ AFRAME.registerComponent('imgnote', {
 
     remove: function () {
         // cleanup when component is removed
+        noteService.deleteNote(this.data.id);
     }
 });
 
@@ -489,7 +556,8 @@ AFRAME.registerComponent('arrnote', {
         pos_z: { type: 'number' },
         pos2_x: { type: 'number' },
         pos2_y: { type: 'number' },
-        pos2_z: { type: 'number' }
+        pos2_z: { type: 'number' },
+        qrcode_id: { type: 'string' }
     },
 
     init: function () {
@@ -521,6 +589,7 @@ AFRAME.registerComponent('arrnote', {
 
     remove: function () {
         // cleanup when component is removed
+        noteService.deleteNote(this.data.id);
     }
 });
 

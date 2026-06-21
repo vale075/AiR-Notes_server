@@ -142,13 +142,13 @@
         <a-mixin id="txtnote"
                  geometry="primitive: plane; height: 0; width: 0"
                  material="color: white; side: double; opacity: .5; transparent: true"
-                 text="color: black; align: center">
+                 text="width: 1; color: black; align: center">
         </a-mixin>
       </a-assets>
       <a-entity id="camera" camera wasd-controls look-controls>
         <a-entity id="headUI" position="0 0 -.5">
           <a-text id="uiTxt"
-                  value="Cliquez sur le QRCode pour le localiser."
+                  value="Cliquez sur le QRCode localiser les notes."
                   align="center"
                   width=".4">
           </a-text>
@@ -188,23 +188,22 @@
                 hide-on-enter-ar
                 color="white"
                 radius=".05"
-                opacity=".5"
+                opacity="0"
                 material="depthWrite: false">
       </a-sphere>
-      <a-entity anchored
-                qr-space-controller="qrid: {{ qrcode.id }}"
+      <a-entity id="coordinatesMarker" visible="false">
+        <a-entity arrow="end: 0 0 .3; color: red">
+        </a-entity>
+        <a-entity arrow="end: 0 .3 0; color: green">
+        </a-entity>
+        <a-entity arrow="end: .3 0 0; color: blue">
+        </a-entity>
+        <a-sphere radius=".03" color="black">
+        </a-sphere>
+      </a-entity>
+      <a-entity qr-space-controller="qrid: {{ qrcode.id }}"
                 position="0 0 -2"
                 visible="false">
-        <a-entity id="qrMarker">
-          <a-entity arrow="end: 0 0 .3; color: red">
-          </a-entity>
-          <a-entity arrow="end: 0 .3 0; color: green">
-          </a-entity>
-          <a-entity arrow="end: .3 0 0; color: blue">
-          </a-entity>
-          <a-sphere radius=".03" color="black">
-          </a-sphere>
-        </a-entity>
         <a-entity id="qrUi" visible="false">
           <a-entity id="closeNoteBtn"
                     class="collidable"
@@ -215,20 +214,44 @@
                     event-set__click="material.color: red"
                     event-set__mouseleave="material.color: blue">
           </a-entity>
+          <a-entity id="newTxtNoteBtn"
+                    class="collidable"
+                    text="value: T; align: center; wrapCount: 25"
+                    geometry="primitive: circle; radius: .05"
+                    material="color: green"
+                    event-set__mouseenter="material.color: green"
+                    event-set__click="material.color: blue"
+                    event-set__mouseleave="material.color: green"
+                    position=".1 .1 0">
+          </a-entity>
+          <a-entity id="newImgNoteBtn"
+                    class="collidable"
+                    text="value: I; align: center; wrapCount: 25"
+                    geometry="primitive: circle; radius: .05"
+                    material="color: green"
+                    event-set__mouseenter="material.color: green"
+                    event-set__click="material.color: blue"
+                    event-set__mouseleave="material.color: green"
+                    position="0 .1 0">
+          </a-entity>
+          <a-entity id="newArrNoteBtn"
+                    class="collidable"
+                    text="value: A; align: center; wrapCount: 25"
+                    geometry="primitive: circle; radius: .05"
+                    material="color: green"
+                    event-set__mouseenter="material.color: green"
+                    event-set__click="material.color: blue"
+                    event-set__mouseleave="material.color: green"
+                    position="-.1 .1 0">
+          </a-entity>
         </a-entity>
         <a-entity id="notes" visible="false">
         </a-entity>
       </a-entity>
-      <a-box class="collidable"
-             position="0 1 -2"
-             color="yellow"
-             change-color-on-click>
+      {% comment %} <a-box class="collidable" position="0 1 -2" color="yellow" change-color-on-click>
       </a-box>
-      <a-box class="collidable"
-             position="0 1 -3"
-             color="yellow"
-             change-color-on-click>
-      </a-box>
+      <a-box class="collidable" position="0 1 -3" color="yellow" change-color-on-click>
+      </a-box> {% endcomment %}
       {# djlint:off H025 #}
     </a-scene>
   </body>
