@@ -170,6 +170,10 @@
                position="-.05 -.1 0"
                {% if not edit %}visible="false"{% endif %}>
       </a-mixin>
+      <a-mixin id="handRayProfile"
+               raycaster="objects: .collidable; showLine: true; far: 10;"
+               line="color: #6c5ce7; opacity: 0.7; lineWidth: 3">
+      </a-mixin>
     </a-assets>
     <a-entity id="camera" camera wasd-controls look-controls>
       <a-entity id="headUI" position="0 0 -1">
@@ -185,8 +189,8 @@
                 width=".25"
                 wrap-count="19"
                 position="0 -.1 0"
-                geometry="primitive:plane; width: 0; height: 0"
-                material="color: blue"
+                geometry="primitive:plane; width: 0.22; height: 0.06"
+                material="color: blue; opacity: 0.9"
                 event-set__mouseenter="material.color: green"
                 event-set__click="material.color: green"
                 event-set__mouseleave="material.color: blue"
@@ -194,14 +198,13 @@
         </a-text>
       </a-entity>
     </a-entity>
-    <a-entity id="leftHand" hand-tracking-controls="hand: left;">
+    <a-entity id="leftHand"
+              hand-tracking-controls="hand: left;"
+              mixin="handRayProfile">
     </a-entity>
-    <a-entity id="rightHand" hand-tracking-controls="hand: right;">
-      <a-entity collider-check
-                raycaster="objects: .collidable; showLine:true;"
-                position="0 0 0"
-                rotation="-30 -25 0">
-      </a-entity>
+    <a-entity id="rightHand"
+              hand-tracking-controls="hand: right;"
+              mixin="handRayProfile">
     </a-entity>
     <a-cursor id="mobileTouchHandler"
               raycaster="objects: .collidable"
@@ -405,8 +408,9 @@
     };
   }
 
-  function getRightHandPointerPose() {
-    const pointerEl = document.querySelector('#rightHand [collider-check]');
+  // Modified to read dynamically from whichever hand is active/firing the gesture
+  function getHandPointerPose(handId) {
+    const pointerEl = document.getElementById(handId);
     if (!pointerEl) return null;
     const origin = new THREE.Vector3();
     const quaternion = new THREE.Quaternion();
@@ -528,22 +532,29 @@
     });
   }
 
+  // Dual-hand listener setup mapping directly to standard pointer actions
   function setupHandTrackingSelect() {
-    const handEl = document.querySelector('#rightHand');
-    if (!handEl) return;
+    const leftHand = document.querySelector('#leftHand');
+    const rightHand = document.querySelector('#rightHand');
 
-    handEl.addEventListener('pinchstarted', () => {
-      const pose = getRightHandPointerPose();
-      if (!pose) return;
-      const hit = raycastCollidables(pose.origin, pose.direction);
-      gateArHitTest(!!hit);
-      pinchHitEl = hit ? hit.el : null;
-    });
+    const configureHandEvents = (handEl, handId) => {
+      if (!handEl) return;
+      handEl.addEventListener('pinchstarted', () => {
+        const pose = getHandPointerPose(handId);
+        if (!pose) return;
+        const hit = raycastCollidables(pose.origin, pose.direction);
+        gateArHitTest(!!hit);
+        pinchHitEl = hit ? hit.el : null;
+      });
 
-    handEl.addEventListener('pinchended', () => {
-      if (pinchHitEl) pinchHitEl.emit('click', {}, false);
-      pinchHitEl = null;
-    });
+      handEl.addEventListener('pinchended', () => {
+        if (pinchHitEl) pinchHitEl.emit('click', {}, false);
+        pinchHitEl = null;
+      });
+    };
+
+    configureHandEvents(leftHand, 'leftHand');
+    configureHandEvents(rightHand, 'rightHand');
   }
 
   function setupAdaptiveControls() {
@@ -554,8 +565,8 @@
     if (!checkMagicLeap()) {
       console.log("Mobile phone detected. Setting up tap / long-press-to-drag.");
 
-      if (leftHand) leftHand.setAttribute('visible', 'false');
-      if (rightHand) rightHand.setAttribute('visible', 'false');
+      if (leftHand) leftHand.removeAttribute('mixin');
+      if (rightHand) rightHand.removeAttribute('mixin');
       if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false'); // not used in AR session
 
       setupMobileSelect();
