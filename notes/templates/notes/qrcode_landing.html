@@ -148,7 +148,27 @@
       <a-mixin id="txtnote"
                geometry="primitive: plane; height: 0; width: 0"
                material="color: white; side: double; opacity: .5; transparent: true"
-               text="width: 1; color: black; align: center">
+               text="width: 1; color: black; align: center; baseline: bottom">
+      </a-mixin>
+      <a-mixin id="uiBtnEditMixin"
+               text="value: E; align: center; wrapCount: 25"
+               geometry="primitive: circle; radius: .05"
+               material="color: green"
+               event-set__mouseenter="material.color: green"
+               event-set__click="material.color: blue"
+               event-set__mouseleave="material.color: green"
+               position=".05 -.1 0"
+               {% if not edit %}visible="false"{% endif %}>
+      </a-mixin>
+      <a-mixin id="uiBtnDeleteMixin"
+               text="value: X; align: center; wrapCount: 25"
+               geometry="primitive: circle; radius: .05"
+               material="color: red"
+               event-set__mouseenter="material.color: red"
+               event-set__click="material.color: blue"
+               event-set__mouseleave="material.color: red"
+               position="-.05 -.1 0"
+               {% if not edit %}visible="false"{% endif %}>
       </a-mixin>
     </a-assets>
     <a-entity id="camera" camera wasd-controls look-controls>

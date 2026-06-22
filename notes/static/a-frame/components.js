@@ -349,6 +349,20 @@ AFRAME.registerComponent('txtnote', {
     init: function () {
         // runs once when the component is attached to an entity
         this.el.setAttribute('mixin', 'txtnote');
+
+        this.editBtn = document.createElement('a-entity');
+        this.editBtn.setAttribute('mixin', "uiBtnEditMixin");
+        this.editBtn.setAttribute('class', "collidable");
+        this.el.appendChild(this.editBtn);
+
+        this.deleteBtn = document.createElement('a-entity');
+        this.deleteBtn.setAttribute('mixin', "uiBtnDeleteMixin");
+        this.deleteBtn.setAttribute('class', "collidable");
+        this.deleteBtn.addEventListener('click', (event) => {
+            this.el.parentNode.removeChild(this.el);
+        });
+        this.el.appendChild(this.deleteBtn);
+
         this.init = true;
     },
 
@@ -406,7 +420,9 @@ AFRAME.registerComponent('txtnote', {
     },
 
     remove: function () {
-        noteService.deleteNote(this.data.id);
+        if (this.data.id) {
+            noteService.deleteNote(this.data.id);
+        }
     }
 });
 
