@@ -172,7 +172,7 @@
       </a-mixin>
     </a-assets>
     <a-entity id="camera" camera wasd-controls look-controls>
-      <a-entity id="headUI" position="0 0 -.5">
+      <a-entity id="headUI" position="0 0 -1">
         <a-text id="uiTxt"
                 value="Cliquez sur le QRCode localiser les notes."
                 align="center"
@@ -218,13 +218,13 @@
               material="depthWrite: false">
     </a-sphere>
     <a-entity id="coordinatesMarker" visible="false">
-      <a-entity arrow="end: 0 0 .3; color: red">
+      <a-entity arrow="end: 0 0 .3; color: red; shaftRadius: 0.01; headRadius: 0.03; headLength: 0.1">
       </a-entity>
-      <a-entity arrow="end: 0 .3 0; color: green">
+      <a-entity arrow="end: 0 .3 0; color: green; shaftRadius: 0.01; headRadius: 0.03; headLength: 0.1">
       </a-entity>
-      <a-entity arrow="end: .3 0 0; color: blue">
+      <a-entity arrow="end: .3 0 0; color: blue; shaftRadius: 0.01; headRadius: 0.03; headLength: 0.1">
       </a-entity>
-      <a-sphere radius=".03" color="black">
+      <a-sphere radius=".01" color="black">
       </a-sphere>
     </a-entity>
     <a-entity qr-space-controller="qrid: {{ qrcode.id }}"
