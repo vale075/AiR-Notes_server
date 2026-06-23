@@ -330,11 +330,176 @@ AFRAME.registerComponent('qr-space-controller', {
     }
 });
 
+
+const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+const whisperServerUrl = `${wsScheme}://${window.location.host}/ws/whisper/`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WhisperLive dictation singleton
+//
+// Owns ONE AudioContext + WorkletNode shared across all txtnote instances.
+// Only one note can dictate at a time; starting a new one stops the previous.
+// ─────────────────────────────────────────────────────────────────────────────
+const WhisperDictation = (() => {
+    // AudioWorklet processor: buffers mic input into 4096-sample float32 chunks
+    // and posts { pcm: ArrayBuffer, rms: number } back to the main thread.
+    const WORKLET_SRC = `
+class PCMProcessor extends AudioWorkletProcessor {
+  constructor() { super(); this._buf = []; this._bufLen = 0; this._chunkSize = 4096; }
+  process(inputs) {
+    const ch = inputs[0]?.[0];
+    if (!ch) return true;
+    this._buf.push(new Float32Array(ch));
+    this._bufLen += ch.length;
+    while (this._bufLen >= this._chunkSize) {
+      const out = new Float32Array(this._chunkSize);
+      let offset = 0;
+      while (offset < this._chunkSize && this._buf.length) {
+        const piece = this._buf[0];
+        const need = this._chunkSize - offset;
+        if (piece.length <= need) {
+          out.set(piece, offset); offset += piece.length;
+          this._bufLen -= piece.length; this._buf.shift();
+        } else {
+          out.set(piece.subarray(0, need), offset);
+          this._buf[0] = piece.subarray(need);
+          this._bufLen -= need; offset += need;
+        }
+      }
+      let sum = 0;
+      for (let i = 0; i < out.length; i++) sum += out[i] * out[i];
+      this.port.postMessage({ pcm: out.buffer, rms: Math.sqrt(sum / out.length) }, [out.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-processor', PCMProcessor);
+`;
+
+    let workletUrl = null;
+    let audioCtx = null;
+    let workletNode = null;
+    let sourceNode = null;
+    let micStream = null;
+    let ws = null;
+    let activeCallback = null;  // { onSegment, onStop } for the current owner
+    const clientId = Math.random().toString(36).slice(2, 10);
+
+    function getWorkletUrl() {
+        if (!workletUrl) {
+            const blob = new Blob([WORKLET_SRC], { type: 'application/javascript' });
+            workletUrl = URL.createObjectURL(blob);
+        }
+        return workletUrl;
+    }
+
+    function teardownAudio() {
+        if (workletNode) { workletNode.disconnect(); workletNode = null; }
+        if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
+        if (audioCtx) { audioCtx.close(); audioCtx = null; }
+        if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    }
+
+    function teardownWs() {
+        if (ws) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ uid: clientId, eof: 1 }));
+            }
+            ws.close();
+            ws = null;
+        }
+    }
+
+    /**
+     * Start dictating into a txtnote entity.
+     * @param {object} opts
+     * @param {string}   [opts.model]    - whisper model name
+     * @param {string}   [opts.language] - ISO language code or null for auto
+     * @param {function} opts.onSegment  - called with (text, isPartial)
+     * @param {function} opts.onStop     - called when recording stops for any reason
+     */
+    async function start({ model = 'small', language = null, onSegment, onStop }) {
+        // Stop any previous session first
+        await stop();
+
+        activeCallback = { onSegment, onStop };
+
+        // 1. WebSocket
+        await new Promise((resolve, reject) => {
+            const socket = new WebSocket(whisperServerUrl);
+            socket.binaryType = 'arraybuffer';
+            socket.onopen = () => {
+                socket.send(JSON.stringify({
+                    uid: clientId,
+                    language: language || null,
+                    task: 'transcribe',
+                    model,
+                    use_vad: true,
+                    audio_format: 'float32',
+                }));
+                resolve();
+            };
+            socket.onerror = (e) => reject(new Error('WebSocket error'));
+            socket.onclose = () => {
+                if (activeCallback?.onStop) activeCallback.onStop();
+                activeCallback = null;
+            };
+            socket.onmessage = (ev) => {
+                let data;
+                try { data = JSON.parse(ev.data); } catch { return; }
+                if (data.uid !== clientId) return;
+                if (data.message === 'SERVER_READY') return;
+                if (data.status === 'WAIT' || data.status === 'ERROR') {
+                    console.warn('[WhisperDictation] server status:', data.status, data.message);
+                    return;
+                }
+                if (Array.isArray(data.segments) && activeCallback) {
+                    // Concatenate all segment texts for a flat string
+                    const text = data.segments.map(s => (s.text || s).trim()).filter(Boolean).join(' ');
+                    const isPartial = !data.completed;
+                    activeCallback.onSegment(text, isPartial);
+                }
+            };
+            ws = socket;
+        });
+
+        // 2. Mic + AudioWorklet
+        micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                channelCount: 1, sampleRate: { ideal: 16000 },
+                echoCancellation: true, noiseSuppression: true,
+            }
+        });
+        audioCtx = new AudioContext({ sampleRate: 16000 });
+        await audioCtx.audioWorklet.addModule(getWorkletUrl());
+        sourceNode = audioCtx.createMediaStreamSource(micStream);
+        workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+        workletNode.port.onmessage = ({ data: { pcm } }) => {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(pcm);
+        };
+        sourceNode.connect(workletNode);
+        // workletNode deliberately not connected to destination (silent capture)
+    }
+
+    async function stop() {
+        teardownWs();
+        teardownAudio();
+        // onStop is fired by ws.onclose; but if ws was never opened, call it manually
+        if (activeCallback) {
+            activeCallback.onStop?.();
+            activeCallback = null;
+        }
+    }
+
+    return { start, stop };
+})();
+
+
 AFRAME.registerComponent('txtnote', {
     schema: {
         id: { type: 'string' },
         title: { type: 'string' },
-        content: { type: 'string', default: "X" },
+        content: { type: 'string', default: "Lorem ipsum dolor sit amet." },
         pos_x: { type: 'number' },
         pos_y: { type: 'number' },
         pos_z: { type: 'number' },
@@ -363,8 +528,64 @@ AFRAME.registerComponent('txtnote', {
         });
         this.el.appendChild(this.deleteBtn);
 
+        // ── Dictation state ──────────────────────────────────────────────
+        this._dictating = false;
+        this._contentBeforeDictation = '';  // snapshot so we can prepend/replace
+
+        this.editBtn.addEventListener('click', () => {
+            if (this._dictating) {
+                this._stopDictation();
+            } else {
+                this._startDictation();
+            }
+        });
+
         this.init = true;
         this._creating = false;
+    },
+
+    _startDictation: async function () {
+        this._dictating = true;
+        this._contentBeforeDictation = '';//this.data.content; We decide to overwrite everything.
+
+        // Visual feedback: pulse the edit button red while recording
+        this.editBtn.setAttribute('material', 'color', '#ff4444');
+        this.editBtn.setAttribute('text', 'value', '●');
+
+        try {
+            await WhisperDictation.start({
+                onSegment: (text, isPartial) => {
+                    if (!this._dictating) return;
+                    // Append new transcript after whatever was there before dictation started
+                    const base = this._contentBeforeDictation ? this._contentBeforeDictation + ' ' : '';
+                    // Use setAttribute so A-Frame's update() → text component → API save all fire normally
+                    this.el.setAttribute('txtnote', 'content', base + text);
+                },
+                onStop: () => {
+                    // Called when WS closes (server timeout, network drop, etc.)
+                    this._cleanupDictationUI();
+                },
+            });
+        } catch (err) {
+            console.error('[txtnote] dictation failed to start:', err);
+            this._cleanupDictationUI();
+        }
+    },
+
+    _stopDictation: function () {
+        WhisperDictation.stop();   // triggers onStop → _cleanupDictationUI
+        this._dictating = false;
+    },
+
+    _cleanupDictationUI: function () {
+        this._dictating = false;
+        // Restore edit button appearance
+        this.editBtn.setAttribute('material', 'color', 'green');
+        this.editBtn.setAttribute('text', 'value', 'E');
+    },
+
+    remove: function () {
+        if (this._dictating) this._stopDictation();
     },
 
     update: async function (oldData) {
