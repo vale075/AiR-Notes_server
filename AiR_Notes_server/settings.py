@@ -69,6 +69,7 @@ LOW_BALANCE_WARNING_THRESHOLD = Decimal(2)
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -79,6 +80,7 @@ INSTALLED_APPS = [
     "ninja",
     "users",
     "notes",
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -247,3 +249,5 @@ CACHES = {
         "LOCATION": "django_cache",
     }
 }
+
+ASGI_APPLICATION = "AiR_Notes_server.asgi.application"

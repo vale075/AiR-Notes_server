@@ -1,234 +1,756 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.5">
-    <title>IA Vocale Locale - Magic Leap 2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhisperLive</title>
     <style>
-      body {
-        font-family: sans-serif;
-        background-color: #121212;
-        /* Noir pour transparence en AR */
-        color: #ffffff;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 2rem;
+      @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
         margin: 0;
+        padding: 0;
       }
 
-      .container {
-        background: rgba(30, 30, 30, 0.9.5);
-        padding: 2.5rem;
-        border-radius: 16px;
-        width: 85%;
-        max-width: 750px;
-        text-align: center;
-        border: 1px solid #444;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      :root {
+        --bg: #0d0f12;
+        --surface: #161a1f;
+        --border: #252b33;
+        --accent: #00e5a0;
+        --accent-dim: #00704e;
+        --warn: #ff6b4a;
+        --text: #d4dae2;
+        --muted: #5a6370;
+        --mono: 'IBM Plex Mono', monospace;
+        --sans: 'IBM Plex Sans', sans-serif;
       }
 
-      h2 {
-        margin-top: 0;
-        color: #f0f0f0;
+      html,
+      body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.5;
       }
 
-      /* Bouton géant pour ciblage facile au contrôleur */
-      button {
-        padding: 24px 48px;
-        font-size: 1.6rem;
-        font-weight: bold;
-        border-radius: 12px;
-        border: none;
-        background-color: #3700b3;
-        color: white;
-        cursor: pointer;
-        margin: 20px 0;
-        width: 100%;
-        transition: all 0.2s ease;
+      body {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 100vh;
       }
 
-      button:disabled {
-        background-color: #555 !important;
-        color: #aaa;
-        cursor: not-allowed;
+      /* ── Header ── */
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+        gap: 16px;
+        flex-wrap: wrap;
       }
 
-      button.recording {
-        background-color: #cf6679;
-        animation: pulse 1.5s infinite;
+      .logo {
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--accent);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
 
-      #status {
-        font-size: 1.2rem;
-        color: #03dac6;
-        margin-bottom: 15px;
-        min-height: 1.5rem;
+      .logo-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse-dot 2s ease-in-out infinite;
       }
 
-      #output {
-        margin-top: 20px;
-        padding: 25px;
-        background: #000000;
-        min-height: 120px;
-        border-radius: 10px;
-        font-size: 1.6rem;
-        text-align: left;
-        border: 1px solid #333;
-        line-height: 1.4;
+      .logo-dot.off {
+        background: var(--muted);
+        animation: none;
       }
 
-      @keyframes pulse {
-        0% {
+      @keyframes pulse-dot {
+
+        0%,
+        100% {
           opacity: 1;
         }
 
         50% {
-          opacity: 0.7;
+          opacity: 0.3;
+        }
+      }
+
+      .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .field label {
+        font-size: 10px;
+        font-family: var(--mono);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .field input,
+      .field select {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 5px 8px;
+        border-radius: 4px;
+        outline: none;
+        transition: border-color 0.15s;
+        min-width: 0;
+      }
+
+      .field input:focus,
+      .field select:focus {
+        border-color: var(--accent);
+      }
+
+      .field input[type="text"] {
+        width: 240px;
+      }
+
+      .field select {
+        width: 110px;
+      }
+
+      /* ── Buttons ── */
+      .btn {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        padding: 7px 18px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s, opacity 0.15s;
+        white-space: nowrap;
+        align-self: flex-end;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: #000;
+      }
+
+      .btn-primary:hover {
+        background: #00ffc0;
+      }
+
+      .btn-stop {
+        background: transparent;
+        border-color: var(--warn);
+        color: var(--warn);
+      }
+
+      .btn-stop:hover {
+        background: var(--warn);
+        color: #000;
+      }
+
+      .btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+
+      /* ── Main ── */
+      main {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        overflow: hidden;
+        padding: 20px 24px;
+        gap: 16px;
+      }
+
+      /* ── VU Meter + status strip ── */
+      .status-strip {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .vu-wrap {
+        flex: 1;
+        height: 4px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+        max-width: 200px;
+      }
+
+      .vu-bar {
+        height: 100%;
+        width: 0%;
+        background: var(--accent);
+        border-radius: 2px;
+        transition: width 0.05s linear;
+      }
+
+      #status-text {
+        flex: 1;
+      }
+
+      #conn-badge {
+        font-size: 10px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: var(--border);
+        color: var(--muted);
+      }
+
+      #conn-badge.connected {
+        background: var(--accent-dim);
+        color: var(--accent);
+      }
+
+      #conn-badge.error {
+        background: #3d1a15;
+        color: var(--warn);
+      }
+
+      /* ── Transcript ── */
+      .transcript-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .transcript-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      .transcript-toolbar span {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .toolbar-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .btn-sm {
+        font-family: var(--mono);
+        font-size: 10px;
+        padding: 3px 10px;
+        border-radius: 3px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+
+      .btn-sm:hover {
+        color: var(--text);
+        border-color: var(--muted);
+      }
+
+      #transcript {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        font-family: var(--sans);
+        font-size: 16px;
+        font-weight: 300;
+        line-height: 1.8;
+        letter-spacing: 0.01em;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+      }
+
+      #transcript:empty::before {
+        content: "Transcript will appear here…";
+        color: var(--muted);
+        font-style: italic;
+        font-size: 14px;
+      }
+
+      .seg-final {
+        color: var(--text);
+      }
+
+      .seg-partial {
+        color: var(--muted);
+        border-left: 2px solid var(--accent-dim);
+        padding-left: 8px;
+        margin-left: -10px;
+      }
+
+      /* ── Footer ── */
+      footer {
+        padding: 10px 24px;
+        border-top: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      /* ── Responsive ── */
+      @media (max-width: 640px) {
+        header {
+          padding: 12px 14px;
         }
 
-        100% {
-          opacity: 1;
+        main {
+          padding: 14px;
+        }
+
+        .field input[type="text"] {
+          width: 180px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+
+        .logo-dot,
+        .vu-bar {
+          animation: none;
+          transition: none;
         }
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <h2>IA Vocale 100% Locale</h2>
-      <div id="status">Initialisation de l'environnement informatique...</div>
-      <button id="btn-action" disabled>Veuillez patienter...</button>
-      <div id="output">Le texte transcrit s'affichera ici après l'enregistrement.</div>
-    </div>
-    <script type="module">
-      import {
-        pipeline,
-        env
-      } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
-
-      // Optimisation : Empêcher la recherche de fichiers locaux, forcer le CDN au premier téléchargement
-      env.allowLocalModels = false;
-
-      const statusEl = document.getElementById('status');
-      const btnAction = document.getElementById('btn-action');
-      const outputEl = document.getElementById('output');
-
-      let transcriber = null;
-      let mediaRecorder = null;
-      let audioChunks = [];
-      let isRecording = false;
-
-      // 1. Initialisation et téléchargement transparent du modèle Whisper AI
-      async function initAI() {
-        try {
-          statusEl.innerText = "Téléchargement du modèle IA (75 Mo - Patientez)...";
-
-          transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', {
-            progress_callback: (data) => {
-              if (data.status === 'progress') {
-                statusEl.innerText = `Téléchargement : ${Math.round(data.progress)}%`;
-              }
-            }
-          });
-
-          statusEl.innerText = "Modèle prêt et stocké localement !";
-          btnAction.innerText = "Démarrer l'enregistrement";
-          btnAction.disabled = false;
-        } catch (error) {
-          console.error(error);
-          statusEl.innerText = "Erreur critique lors du chargement de l'IA.";
-          outputEl.innerText = error.message;
-        }
-      }
-
-      // 2. Gestion de l'action du bouton (Démarrer / Arrêter)
-      btnAction.addEventListener('click', async () => {
-        if (!isRecording) {
-          startRecording();
+    <header>
+      <div class="logo">
+        <div class="logo-dot off" id="dot"></div>
+        WhisperLive
+      </div>
+      <div class="header-controls">
+        <div class="field">
+          <label>Server URL</label>
+          <input type="text"
+                 id="serverUrl"
+                 value="wss://cachyos2g15.tailc9ff8.ts.net/ws/whisper/"
+                 placeholder="wss://cachyos2g15.tailc9ff8.ts.net/ws/whisper/" />
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <select id="model">
+            <option value="tiny">tiny</option>
+            <option value="base">base</option>
+            <option value="small" selected>small</option>
+            <option value="medium">medium</option>
+            <option value="large-v3">large-v3</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Language</label>
+          <select id="lang">
+            <option value="">auto</option>
+            <option value="en">en</option>
+            <option value="fr">fr</option>
+            <option value="de">de</option>
+            <option value="es">es</option>
+            <option value="it">it</option>
+            <option value="pt">pt</option>
+            <option value="ja">ja</option>
+            <option value="zh">zh</option>
+            <option value="ar">ar</option>
+            <option value="ru">ru</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="startBtn" onclick="startTranscription()">Record</button>
+        <button class="btn btn-stop"
+                id="stopBtn"
+                onclick="stopTranscription()"
+                disabled>Stop</button>
+      </div>
+    </header>
+    <main>
+      <div class="status-strip">
+        <div class="vu-wrap">
+          <div class="vu-bar" id="vuBar"></div>
+        </div>
+        <span id="status-text">Ready</span>
+        <span id="conn-badge">disconnected</span>
+      </div>
+      <div class="transcript-wrap">
+        <div class="transcript-toolbar">
+          <span>Transcript</span>
+          <div class="toolbar-actions">
+            <button class="btn-sm" onclick="copyTranscript()">Copy</button>
+            <button class="btn-sm" onclick="clearTranscript()">Clear</button>
+          </div>
+        </div>
+        <div id="transcript"></div>
+      </div>
+    </main>
+    <footer>
+      <span>WhisperLive client · AudioWorklet + WebSocket</span>
+      <span id="footer-stats">—</span>
+    </footer>
+    <!-- AudioWorklet processor inline as a Blob URL -->
+    <script>
+      // ─────────────────────────────────────────────
+      //  AudioWorklet processor source (run in worker)
+      // ─────────────────────────────────────────────
+      const WORKLET_SRC = `
+class PCMProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._buf = [];
+    this._bufLen = 0;
+    // Send 4096 float32 samples per message (~0.093s at 44100Hz, ~0.128s at 32000Hz)
+    this._chunkSize = 4096;
+  }
+  process(inputs) {
+    const ch = inputs[0]?.[0];
+    if (!ch) return true;
+    this._buf.push(new Float32Array(ch));
+    this._bufLen += ch.length;
+    while (this._bufLen >= this._chunkSize) {
+      // Assemble chunk
+      const out = new Float32Array(this._chunkSize);
+      let offset = 0;
+      while (offset < this._chunkSize && this._buf.length) {
+        const piece = this._buf[0];
+        const need = this._chunkSize - offset;
+        if (piece.length <= need) {
+          out.set(piece, offset);
+          offset += piece.length;
+          this._bufLen -= piece.length;
+          this._buf.shift();
         } else {
-          stopRecording();
+          out.set(piece.subarray(0, need), offset);
+          this._buf[0] = piece.subarray(need);
+          this._bufLen -= need;
+          offset += need;
         }
-      });
+      }
+      // Compute RMS for VU
+      let sum = 0;
+      for (let i = 0; i < out.length; i++) sum += out[i] * out[i];
+      const rms = Math.sqrt(sum / out.length);
+      this.port.postMessage({ pcm: out.buffer, rms }, [out.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-processor', PCMProcessor);
+`;
 
-      async function startRecording() {
-        audioChunks = [];
+      // ─────────────────────────────────────────────
+      //  State
+      // ─────────────────────────────────────────────
+      let ws = null;
+      let audioCtx = null;
+      let workletNode = null;
+      let sourceNode = null;
+      let stream = null;
+      let workletUrl = null;
+      let segmentsMap = new Map(); // uid → { el, text }
+      let sessionStart = null;
+      let bytesSent = 0;
+
+      const uid = () => Math.random().toString(36).slice(2, 10);
+      const clientId = uid();
+
+      // ─────────────────────────────────────────────
+      //  DOM helpers
+      // ─────────────────────────────────────────────
+      const $ = id => document.getElementById(id);
+      const dot = $('dot');
+      const vuBar = $('vuBar');
+      const statusTxt = $('status-text');
+      const connBadge = $('conn-badge');
+      const transcript = $('transcript');
+      const footerStats = $('footer-stats');
+
+      function setStatus(msg, type = '') {
+        statusTxt.textContent = msg;
+        connBadge.textContent = type || 'disconnected';
+        connBadge.className = type === 'connected' ? 'connected' : type === 'error' ? 'error' : '';
+      }
+
+      function setRecording(active) {
+        dot.className = 'logo-dot' + (active ? '' : ' off');
+        $('startBtn').disabled = active;
+        $('stopBtn').disabled = !active;
+        $('serverUrl').disabled = active;
+      }
+
+      function updateStats() {
+        if (!sessionStart) return;
+        const secs = ((Date.now() - sessionStart) / 1000).toFixed(0);
+        footerStats.textContent = `${secs}s · ${(bytesSent / 1024).toFixed(1)} KB sent`;
+      }
+
+      // ─────────────────────────────────────────────
+      //  Transcript rendering
+      // ─────────────────────────────────────────────
+      function renderSegments(segments, isPartial) {
+        if (!segments || !segments.length) return;
+
+        // For WhisperLive the server sends the full segment list each time,
+        // so we reconcile by index.
+        segments.forEach((seg, i) => {
+          const key = `seg-${i}`;
+          const text = (seg.text || seg).trim();
+          if (!text) return;
+
+          if (!segmentsMap.has(key)) {
+            const el = document.createElement('p');
+            el.className = isPartial ? 'seg-partial' : 'seg-final';
+            transcript.appendChild(el);
+            segmentsMap.set(key, el);
+          }
+          const el = segmentsMap.get(key);
+          el.className = isPartial ? 'seg-partial' : 'seg-final';
+          el.textContent = text;
+        });
+
+        // Auto-scroll
+        transcript.scrollTop = transcript.scrollHeight;
+      }
+
+      function clearTranscript() {
+        transcript.innerHTML = '';
+        segmentsMap.clear();
+      }
+
+      function copyTranscript() {
+        const text = [...segmentsMap.values()].map(el => el.textContent).join('\n');
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+
+      // ─────────────────────────────────────────────
+      //  WebSocket
+      // ─────────────────────────────────────────────
+      function openWebSocket(url) {
+        return new Promise((resolve, reject) => {
+          const socket = new WebSocket(url);
+          socket.binaryType = 'arraybuffer';
+
+          socket.onopen = () => {
+            // Send initial config message (WhisperLive protocol)
+            const config = {
+              uid: clientId,
+              language: $('lang').value || null,
+              task: 'transcribe',
+              model: $('model').value,
+              use_vad: true,
+              audio_format: 'float32',
+            };
+            socket.send(JSON.stringify(config));
+            setStatus('Connected — waiting for server ready…', 'connected');
+            resolve(socket);
+          };
+
+          socket.onerror = (e) => {
+            setStatus('WebSocket error', 'error');
+            reject(e);
+          };
+
+          socket.onclose = () => {
+            setStatus('Disconnected');
+            connBadge.textContent = 'disconnected';
+            connBadge.className = '';
+          };
+
+          socket.onmessage = (ev) => {
+            let data;
+            try {
+              data = JSON.parse(ev.data);
+            } catch {
+              return;
+            }
+
+            if (data.uid !== clientId) return;
+
+            // Server WAIT / FULL messages
+            if (data.status === 'WAIT') {
+              setStatus(`Server busy — retry in ${data.message}s`, 'error');
+              return;
+            }
+            if (data.status === 'ERROR') {
+              setStatus(`Server error: ${data.message}`, 'error');
+              return;
+            }
+
+            // SERVER_READY
+            if (data.message === 'SERVER_READY') {
+              setStatus('Recording…', 'connected');
+              return;
+            }
+
+            // Transcription response
+            if (Array.isArray(data.segments)) {
+              const partial = !data.completed;
+              renderSegments(data.segments, partial);
+            }
+          };
+        });
+      }
+
+      // ─────────────────────────────────────────────
+      //  Audio pipeline
+      // ─────────────────────────────────────────────
+      async function buildWorkletUrl() {
+        if (workletUrl) return workletUrl;
+        const blob = new Blob([WORKLET_SRC], {
+          type: 'application/javascript'
+        });
+        workletUrl = URL.createObjectURL(blob);
+        return workletUrl;
+      }
+
+      async function startMic() {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: {
+              ideal: 16000
+            },
+            echoCancellation: true,
+            noiseSuppression: true,
+          }
+        });
+
+        audioCtx = new AudioContext({
+          sampleRate: 16000
+        });
+        await audioCtx.audioWorklet.addModule(await buildWorkletUrl());
+
+        sourceNode = audioCtx.createMediaStreamSource(stream);
+        workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+
+        workletNode.port.onmessage = ({
+          data: {
+            pcm,
+            rms
+          }
+        }) => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(pcm);
+            bytesSent += pcm.byteLength;
+          }
+          // VU meter
+          const pct = Math.min(100, Math.round(rms * 400));
+          vuBar.style.width = pct + '%';
+        };
+
+        sourceNode.connect(workletNode);
+        // Don't connect workletNode to destination (silent capture)
+      }
+
+      function stopMic() {
+        if (workletNode) {
+          workletNode.disconnect();
+          workletNode = null;
+        }
+        if (sourceNode) {
+          sourceNode.disconnect();
+          sourceNode = null;
+        }
+        if (audioCtx) {
+          audioCtx.close();
+          audioCtx = null;
+        }
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop());
+          stream = null;
+        }
+        vuBar.style.width = '0%';
+      }
+
+      // ─────────────────────────────────────────────
+      //  Public controls
+      // ─────────────────────────────────────────────
+      let statsTimer = null;
+
+      async function startTranscription() {
+        const url = $('serverUrl').value.trim();
+        if (!url) {
+          setStatus('Enter a server URL', 'error');
+          return;
+        }
+
+        clearTranscript();
+        bytesSent = 0;
+        sessionStart = Date.now();
+        setRecording(true);
+        setStatus('Connecting…');
+
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true
-          });
-          mediaRecorder = new MediaRecorder(stream);
-
-          mediaRecorder.ondataavailable = event => {
-            if (event.data.size > 0) audioChunks.push(event.data);
-          };
-
-          mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunks, {
-              type: mediaRecorder.mimeType
-            });
-            processAndTranscribe(audioBlob);
-          };
-
-          mediaRecorder.start();
-          isRecording = true;
-          btnAction.innerText = "Arrêter et Transcrire";
-          btnAction.classList.add('recording');
-          statusEl.innerText = "Écoute en cours... Parlez puis cliquez à nouveau.";
+          ws = await openWebSocket(url);
+          await startMic();
+          statsTimer = setInterval(updateStats, 1000);
         } catch (err) {
-          statusEl.innerText = "Accès microphone refusé.";
           console.error(err);
+          setStatus('Failed: ' + (err.message || 'unknown error'), 'error');
+          stopMic();
+          setRecording(false);
         }
       }
 
-      function stopRecording() {
-        if (mediaRecorder && isRecording) {
-          mediaRecorder.stop();
-          // Coupe les pistes du micro pour relâcher le matériel
-          mediaRecorder.stream.getTracks().forEach(track => track.stop());
-          isRecording = false;
-          btnAction.innerText = "Calcul de la transcription...";
-          btnAction.classList.remove('recording');
-          btnAction.disabled = true;
-          statusEl.innerText = "L'IA analyse votre voix en local...";
+      function stopTranscription() {
+        clearInterval(statsTimer);
+        stopMic();
+        if (ws) {
+          // Send END_OF_AUDIO marker
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              uid: clientId,
+              eof: 1
+            }));
+          }
+          ws.close();
+          ws = null;
         }
+        setRecording(false);
+        setStatus('Stopped');
       }
 
-      // 3. Resampling audio natif à 16kHz et exécution de la prédiction IA
-      async function processAndTranscribe(blob) {
-        try {
-          const audioContext = new(window.AudioContext || window.webkitAudioContext)();
-          const arrayBuffer = await blob.arrayBuffer();
-          const originalBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-          // Whisper exige obligatoirement du 16000Hz mono. On rééchantillonne à la volée.
-          const offlineCtx = new OfflineAudioContext(1, originalBuffer.duration * 16000, 16000);
-          const source = offlineCtx.createBufferSource();
-          source.buffer = originalBuffer;
-          source.connect(offlineCtx.destination);
-          source.start();
-
-          const resampledBuffer = await offlineCtx.startRendering();
-          const audioData32 = resampledBuffer.getChannelData(0); // Float32Array final
-
-          // Exécution du modèle Whisper
-          const response = await transcriber(audioData32, {
-            language: 'french',
-            task: 'transcribe'
-          });
-
-          outputEl.innerHTML = `<strong>Résultat :</strong> <br>${response.text}`;
-        } catch (error) {
-          console.error(error);
-          outputEl.innerText = "Erreur d'analyse : " + error.message;
-        } finally {
-          btnAction.disabled = false;
-          btnAction.innerText = "Démarrer l'enregistrement";
-          statusEl.innerText = "Prêt";
-        }
-      }
-
-      // Lancement automatique au chargement de la page
-      initAI();
+      // Cleanup on page unload
+      window.addEventListener('beforeunload', stopTranscription);
     </script>
   </body>
 </html>
