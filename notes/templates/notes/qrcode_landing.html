@@ -135,6 +135,8 @@
            webxr="mode: ar; requiredFeatures: hit-test; referenceSpaceType: local;"
            xr-mode-ui="enabled: true; XRMode: ar"
            vr-mode-ui="enabled: false"
+           custom-ar-hit-test="target: #ar-cursor; mode: viewer"
+           xr-debug
            style="background: transparent;
                   display: none;
                   width: 100%;
@@ -142,8 +144,7 @@
                   position: absolute;
                   top: 0;
                   left: 0;
-                  z-index: 10"
-           ar-hit-test="target:#ar-cursor">
+                  z-index: 10">
     <a-assets>
       <a-mixin id="txtnote"
                geometry="primitive: plane; height: 0; width: 0"
@@ -552,18 +553,16 @@
     const mobileTouchHandler = document.getElementById('mobileTouchHandler');
 
     if (!checkMagicLeap()) {
-      console.log("Mobile phone detected. Setting up tap / long-press-to-drag.");
-
+      console.log("Mobile: viewer hit-test + tap.");
+      sceneEl.setAttribute('custom-ar-hit-test', 'mode', 'viewer');
       if (leftHand) leftHand.setAttribute('visible', 'false');
       if (rightHand) rightHand.setAttribute('visible', 'false');
-      if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false'); // not used in AR session
-
+      if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false');
       setupMobileSelect();
     } else {
-      console.log("Magic Leap 2 detected. Setting up pinch-to-select.");
-
+      console.log("ML2: hand hit-test + pinch.");
+      sceneEl.setAttribute('custom-ar-hit-test', 'mode', 'hand');
       if (mobileTouchHandler) mobileTouchHandler.setAttribute('visible', 'false');
-
       setupHandTrackingSelect();
     }
   }

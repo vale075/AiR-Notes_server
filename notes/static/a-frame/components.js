@@ -379,7 +379,6 @@ AFRAME.registerComponent('txtnote', {
             el.setAttribute('txtnote', 'pos_y', elPos.y);
             el.setAttribute('txtnote', 'pos_z', elPos.z);
         }
-        console.log("update ran");
         // let width = Math.min(data.content.length * .05 + .25, 5);
         // console.log(width)
         el.setAttribute('text', { value: data.content });
@@ -636,6 +635,230 @@ AFRAME.registerComponent('change-color-on-click', {
 
             // Change the target entity's color attribute
             el.setAttribute('material', 'color', randomColor);
+        });
+    }
+});
+
+
+AFRAME.registerComponent('custom-ar-hit-test', {
+    schema: {
+        target: { type: 'selector' },
+        mode: { default: 'viewer', oneOf: ['viewer', 'hand'] },
+        enabled: { default: true }
+    },
+
+    init: function () {
+        this.hitTestSource = null;
+        this.transientHitTestSource = null; // separate source for phone tap
+        this.active = false;
+        this.laserEl = null;
+        this._lastPose = null;
+        this._activeSource = null;
+
+        var self = this;
+        var renderer = this.el.sceneEl.renderer;
+
+        renderer.xr.addEventListener('sessionstart', function () {
+            // Removed is('ar-mode') check — it's false at this point due to async timing
+            self._session = renderer.xr.getSession();
+            self._setupHitTestSource();
+            self._setupLaser();
+            self._session.addEventListener('selectstart', self._onSelectStart.bind(self));
+            self._session.addEventListener('selectend', self._onSelectEnd.bind(self));
+        });
+
+        renderer.xr.addEventListener('sessionend', function () {
+            self.hitTestSource = null;
+            self.transientHitTestSource = null;
+            self.active = false;
+            self._session = null;
+            self._lastPose = null;
+            if (self.laserEl) {
+                self.laserEl.parentNode.removeChild(self.laserEl);
+                self.laserEl = null;
+            }
+        });
+    },
+
+    _setupHitTestSource: function () {
+        var self = this;
+        var session = this._session;
+
+        if (this.data.mode === 'viewer') {
+            // Phone: use transient input hit-test so the ray follows the tap point,
+            // not the screen center. This mirrors exactly what A-Frame's original does.
+            session.requestHitTestSourceForTransientInput({ profile: 'generic-touchscreen' })
+                .then(function (src) {
+                    self.transientHitTestSource = src;
+                    console.log('custom-ar-hit-test: transient source ready');
+                })
+                .catch(function (e) { console.warn('transient hit-test source failed:', e); });
+
+        } else {
+            // ML2 hand: stable hardware-fused ray from the hand's targetRaySpace
+            var onSourcesChange = function () {
+                var sources = session.inputSources;
+                for (var i = 0; i < sources.length; i++) {
+                    if (sources[i].hand) {
+                        session.requestHitTestSource({ space: sources[i].targetRaySpace })
+                            .then(function (src) {
+                                self.hitTestSource = src;
+                                console.log('custom-ar-hit-test: hand source ready');
+                            })
+                            .catch(function (e) { console.warn('hand hit-test source failed:', e); });
+                        session.removeEventListener('inputsourceschange', onSourcesChange);
+                        return;
+                    }
+                }
+            };
+            session.addEventListener('inputsourceschange', onSourcesChange);
+            onSourcesChange();
+        }
+    },
+
+    _setupLaser: function () {
+        if (this.data.mode !== 'hand') return;
+        this.laserEl = document.createElement('a-cylinder');
+        this.laserEl.setAttribute('radius', '0.003');
+        this.laserEl.setAttribute('height', '1');
+        this.laserEl.setAttribute('segments-height', '1');
+        this.laserEl.setAttribute('segments-radial', '6');
+        this.laserEl.setAttribute('material', 'color: #a29bfe; emissive: #a29bfe; emissiveIntensity: 1; opacity: 0.8; transparent: true; depthWrite: false');
+        this.laserEl.setAttribute('visible', 'false');
+        this.el.sceneEl.appendChild(this.laserEl);
+    },
+
+    _onSelectStart: function (e) {
+        if (!this.data.enabled) return;
+        var src = e.inputSource;
+        if (this.data.mode === 'viewer') {
+            if (src.targetRayMode !== 'transient-pointer' && src.targetRayMode !== 'screen') return;
+        } else {
+            if (!src.hand) return;
+        }
+        this.active = true;
+        this._activeSource = src;
+    },
+
+    _onSelectEnd: function (e) {
+        if (!this.active) return;
+        // For transient/screen inputs the inputSource reference may differ between
+        // selectstart and selectend, so only check mode rather than object identity
+        var src = e.inputSource;
+        if (this.data.mode === 'viewer') {
+            if (src.targetRayMode !== 'transient-pointer' && src.targetRayMode !== 'screen') return;
+        } else {
+            if (!src.hand) return;
+        }
+        if (this._lastPose && this.data.target) {
+            var obj = this.data.target.object3D;
+            obj.position.copy(this._lastPose.transform.position);
+            obj.quaternion.copy(this._lastPose.transform.orientation);
+            obj.visible = true;
+            this.el.sceneEl.emit('ar-hit-test-select', {
+                position: this._lastPose.transform.position,
+                orientation: this._lastPose.transform.orientation
+            });
+        }
+
+        this.active = false;
+        this._activeSource = null;
+    },
+
+    tick: function () {
+        if (!this.data.enabled) return;
+        var frame = this.el.sceneEl.frame;
+        if (!frame) return;
+
+        var renderer = this.el.sceneEl.renderer;
+        var refSpace = renderer.xr.getReferenceSpace();
+
+        if (this.data.mode === 'viewer') {
+            // Transient: results only exist during an active touch
+            if (!this.transientHitTestSource) return;
+            var transientResults = frame.getHitTestResultsForTransientInput(this.transientHitTestSource);
+            if (transientResults.length > 0 && transientResults[0].results.length > 0) {
+                this._lastPose = transientResults[0].results[0].getPose(refSpace);
+            }
+            // Note: _lastPose intentionally kept from last frame so selectend can use it
+            // even after the touch lifts and transient results disappear.
+
+        } else {
+            // Hand: continuous ray, always updating
+            if (!this.hitTestSource) return;
+            var results = frame.getHitTestResults(this.hitTestSource);
+            if (results.length === 0) {
+                if (this.laserEl) this.laserEl.setAttribute('visible', 'false');
+                return;
+            }
+            this._lastPose = results[0].getPose(refSpace);
+            if (!this._lastPose) return;
+
+            // Move cursor to hit point
+            if (this.data.target) {
+                var obj = this.data.target.object3D;
+                obj.position.copy(this._lastPose.transform.position);
+                obj.quaternion.copy(this._lastPose.transform.orientation);
+            }
+
+            // Update laser from hand to hit point
+            if (this.laserEl) {
+                var session = renderer.xr.getSession();
+                if (!session) return;
+                var sources = session.inputSources;
+                for (var i = 0; i < sources.length; i++) {
+                    if (!sources[i].hand) continue;
+                    var handPose = frame.getPose(sources[i].targetRaySpace, refSpace);
+                    if (!handPose) continue;
+                    var origin = new THREE.Vector3().copy(handPose.transform.position);
+                    var hitPt = new THREE.Vector3().copy(this._lastPose.transform.position);
+                    var dist = origin.distanceTo(hitPt);
+                    var dir = hitPt.clone().sub(origin).normalize();
+                    var quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                    this.laserEl.object3D.position.copy(origin.clone().lerp(hitPt, 0.5));
+                    this.laserEl.object3D.quaternion.copy(quat);
+                    this.laserEl.object3D.scale.set(1, dist, 1);  // scale instead of setAttribute for perf
+                    this.laserEl.setAttribute('visible', 'true');
+                    break;
+                }
+            }
+        }
+    },
+
+    remove: function () {
+        if (this.hitTestSource) this.hitTestSource.cancel();
+        if (this.transientHitTestSource) this.transientHitTestSource.cancel();
+        if (this.laserEl && this.laserEl.parentNode) {
+            this.laserEl.parentNode.removeChild(this.laserEl);
+        }
+    }
+});
+
+// DEBUG: log every XR session event to see what's actually firing
+AFRAME.registerComponent('xr-debug', {
+    init: function () {
+        var sceneEl = this.el.sceneEl || this.el;
+        var renderer = sceneEl.renderer;
+
+        sceneEl.addEventListener('enter-vr', function () {
+            console.log('[xr-debug] enter-vr fired');
+        });
+
+        renderer.xr.addEventListener('sessionstart', function () {
+            console.log('[xr-debug] sessionstart fired, isAR:', sceneEl.is('ar-mode'));
+            var session = renderer.xr.getSession();
+            console.log('[xr-debug] session:', session);
+            console.log('[xr-debug] requestHitTestSourceForTransientInput available:',
+                typeof session.requestHitTestSourceForTransientInput);
+            console.log('[xr-debug] requestHitTestSource available:',
+                typeof session.requestHitTestSource);
+
+            session.addEventListener('selectstart', function (e) {
+                console.log('[xr-debug] selectstart:', e.inputSource.targetRayMode, e.inputSource.profiles);
+            });
+            session.addEventListener('selectend', function (e) {
+                console.log('[xr-debug] selectend:', e.inputSource.targetRayMode);
+            });
         });
     }
 });
