@@ -319,8 +319,8 @@
   }
 
   // Function to detect if the user is using a Magic Leap 2 device
-  function checkMagicLeap() {
-    // Direct client-side User-Agent string fallback verification check
+  async function checkMagicLeap() {
+    // 1. Synchronous UA string — fastest
     const ua = navigator.userAgent;
     if (/MagicLeap|Magic Leap|Wolvic/i.test(ua)) {
       console.log("Magic Leap detected via standard User Agent verification!");
@@ -328,36 +328,38 @@
       return true;
     }
 
-    // Modern asynchronous client hint checks if supported natively
+    // 2. High Entropy Client Hints (async) — most reliable on ML2
     if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === 'function') {
-      navigator.userAgentData.getHighEntropyValues(['model'])
-        .then(uaData => {
-          if (uaData.model === "Magic Leap 2") {
-            console.log("Magic Leap 2 detected via High Entropy Client Hints!");
-            showMagicLeapMessage();
-            return true;
-          }
-        }).catch(err => console.error(err));
+      try {
+        const uaData = await navigator.userAgentData.getHighEntropyValues(['model']);
+        if (uaData.model === "Magic Leap 2") {
+          console.log("Magic Leap 2 detected via High Entropy Client Hints!");
+          showMagicLeapMessage();
+          return true;
+        }
+      } catch (err) {
+        console.error("High Entropy Client Hints error:", err);
+      }
     }
 
-    // Fallback architecture Client-Hints network loop check
-    fetch("/", {
+    // 3. Network header fallback (async)
+    try {
+      const response = await fetch("/", {
         headers: {
           "Sec-Fetch-Site": "same-origin",
           "Accept-CH": "Sec-CH-UA-Model"
         }
-      })
-      .then(response => {
-        const model = response.headers.get("sec-ch-ua-model");
-        if (model && model === "Magic Leap 2") {
-          console.log("You are using a Magic Leap 2 device!");
-          showMagicLeapMessage();
-          return true;
-        }
-      })
-      .catch(error => {
-        console.error("Network device checking assertion error:", error);
       });
+      const model = response.headers.get("sec-ch-ua-model");
+      if (model && model === "Magic Leap 2") {
+        console.log("You are using a Magic Leap 2 device!");
+        showMagicLeapMessage();
+        return true;
+      }
+    } catch (error) {
+      console.error("Network device checking assertion error:", error);
+    }
+
     return false;
   }
 
@@ -557,12 +559,12 @@
     });
   }
 
-  function setupAdaptiveControls() {
+  async function setupAdaptiveControls() {
     const leftHand = document.getElementById('leftHand');
     const rightHand = document.getElementById('rightHand');
     const mobileTouchHandler = document.getElementById('mobileTouchHandler');
 
-    if (!checkMagicLeap()) {
+    if (!await checkMagicLeap()) { // ← await here is the key fix
       console.log("Mobile: viewer hit-test + tap.");
       sceneEl.setAttribute('custom-ar-hit-test', 'mode', 'viewer');
       if (leftHand) leftHand.setAttribute('visible', 'false');
