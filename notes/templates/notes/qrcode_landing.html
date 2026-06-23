@@ -382,6 +382,12 @@
   let pinchHitEl = null;
 
   function gateArHitTest(hitFound) {
+    // Gate the new custom component
+    const customHitTest = sceneEl.components['custom-ar-hit-test'];
+    if (customHitTest) {
+      customHitTest.data.enabled = !hitFound;
+    }
+
     const arHitTest = sceneEl.components['ar-hit-test'];
     if (arHitTest && arHitTest.data.enabled === hitFound) {
       sceneEl.setAttribute('ar-hit-test', 'enabled', !hitFound);
@@ -478,6 +484,8 @@
   }
 
   function onSelectEnd() {
+    gateArHitTest(false);
+
     if (isDragging) {
       dragEl.emit('drag-end', {}, false);
       isDragging = false;
@@ -493,6 +501,8 @@
   }
 
   function cancelPress() {
+    gateArHitTest(false);
+
     if (pressTimer) {
       clearTimeout(pressTimer);
       pressTimer = null;
