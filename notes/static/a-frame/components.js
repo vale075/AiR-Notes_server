@@ -364,6 +364,7 @@ AFRAME.registerComponent('txtnote', {
         this.el.appendChild(this.deleteBtn);
 
         this.init = true;
+        this._creating = false;
     },
 
     update: async function (oldData) {
@@ -403,12 +404,15 @@ AFRAME.registerComponent('txtnote', {
         else if (!data.temporary) {
             if (data.id) {
                 noteService.updateTextNote(data.id, AFRAME.utils.diff(oldData, data));
-            } else {
+            } else if (!this._creating) {
+                this._creating = true;
                 try {
                     const newnote = await noteService.createTextNote(data);
                     this.el.setAttribute('txtnote', 'id', newnote.id);
                 } catch (err) {
                     console.error('Failed to create text note:', err);
+                } finally {
+                    this._creating = false;
                 }
             }
         }
