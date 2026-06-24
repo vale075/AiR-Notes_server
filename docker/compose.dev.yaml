@@ -16,6 +16,8 @@ services:
       - db
     tty: true
     stdin_open: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   db:
     image: mariadb:12.3

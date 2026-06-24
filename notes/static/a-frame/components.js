@@ -102,6 +102,33 @@ class NoteService {
     }
 
     /**
+     * Update an existing Image Note
+     * Maps to: PUT /api/notes/notes/image/{note_id}
+     * Sends multipart/form-data with a JSON `payload` field (ImageNoteUpdateIn)
+     * and an optional `file` to replace the image.
+     */
+    async updateImageNote(noteId, payload, file = null) {
+        try {
+            const formData = new FormData();
+            formData.append('payload', JSON.stringify(payload));
+            if (file) {
+                formData.append('file', file);
+            }
+
+            const response = await fetch(`${this.baseUrl}/notes/image/${noteId}`, {
+                method: 'PUT',
+                headers: this._getHeaders(true), // omit Content-Type so browser sets boundary
+                body: formData
+            });
+            if (!response.ok) throw new Error(`Failed to update image note: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error(`Error updating image note ${noteId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Create an Arrow Note
      * Maps to: POST /api/notes/notes/arrow
      * payload format: { qrcode_id, content, title, pos_x, pos_y, pos_z, ... }
@@ -258,6 +285,7 @@ AFRAME.registerComponent('qr-space-controller', {
             location.reload();
         })
 
+
         const newTxtNoteBtnEL = document.querySelector("#newTxtNoteBtn");
 
         newTxtNoteBtnEL.addEventListener("click", (event) => {
@@ -281,6 +309,57 @@ AFRAME.registerComponent('qr-space-controller', {
 
             uiTxtEl.object3D.visible = true;
         })
+
+
+        const newImgNoteBtnEL = document.querySelector("#newImgNoteBtn");
+
+        newImgNoteBtnEL.addEventListener("click", (event) => {
+            const el = document.createElement('a-image');
+            el.setAttribute('visible', false);
+            el.setAttribute('imgnote', { qrcode_id: this.currentQrId, temporary: true });
+            this.notesEl.appendChild(el);
+
+            validateBtnEl.addEventListener("click", (event) => {
+                this.elToMove = false;
+                uiTxtEl.object3D.visible = false;
+                validateBtnEl.object3D.visible = false;
+                coordinatesMarkerEl.object3D.visible = false;
+                newImgNoteBtnEL.emit('mouseleave', {}, false);
+                el.setAttribute('imgnote', 'temporary', false);
+            }, { once: true });
+
+            uiTxtEl.setAttribute('value', "Cliquez sur l'emplacement voulu");
+
+            this.elToMove = el;
+
+            uiTxtEl.object3D.visible = true;
+        })
+
+
+        const newArrNoteBtnEL = document.querySelector("#newArrNoteBtn");
+
+        newArrNoteBtnEL.addEventListener("click", (event) => {
+            const el = document.createElement('a-entity');
+            el.setAttribute('visible', false);
+            el.setAttribute('arrnote', { qrcode_id: this.currentQrId, temporary: true });
+            this.notesEl.appendChild(el);
+
+            validateBtnEl.addEventListener("click", (event) => {
+                this.elToMove = false;
+                uiTxtEl.object3D.visible = false;
+                validateBtnEl.object3D.visible = false;
+                coordinatesMarkerEl.object3D.visible = false;
+                newArrNoteBtnEL.emit('mouseleave', {}, false);
+                el.setAttribute('arrnote', 'temporary', false);
+            }, { once: true });
+
+            uiTxtEl.setAttribute('value', "Cliquez sur l'emplacement voulu pour le premier point");
+
+            this.elToMove = el;
+
+            uiTxtEl.object3D.visible = true;
+        })
+
 
         if (!this.currentQrId) {
             console.error("No QRCode id was passed !");
@@ -330,11 +409,176 @@ AFRAME.registerComponent('qr-space-controller', {
     }
 });
 
+
+const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+const whisperServerUrl = `${wsScheme}://${window.location.host}/ws/whisper/`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WhisperLive dictation singleton
+//
+// Owns ONE AudioContext + WorkletNode shared across all txtnote instances.
+// Only one note can dictate at a time; starting a new one stops the previous.
+// ─────────────────────────────────────────────────────────────────────────────
+const WhisperDictation = (() => {
+    // AudioWorklet processor: buffers mic input into 4096-sample float32 chunks
+    // and posts { pcm: ArrayBuffer, rms: number } back to the main thread.
+    const WORKLET_SRC = `
+class PCMProcessor extends AudioWorkletProcessor {
+  constructor() { super(); this._buf = []; this._bufLen = 0; this._chunkSize = 4096; }
+  process(inputs) {
+    const ch = inputs[0]?.[0];
+    if (!ch) return true;
+    this._buf.push(new Float32Array(ch));
+    this._bufLen += ch.length;
+    while (this._bufLen >= this._chunkSize) {
+      const out = new Float32Array(this._chunkSize);
+      let offset = 0;
+      while (offset < this._chunkSize && this._buf.length) {
+        const piece = this._buf[0];
+        const need = this._chunkSize - offset;
+        if (piece.length <= need) {
+          out.set(piece, offset); offset += piece.length;
+          this._bufLen -= piece.length; this._buf.shift();
+        } else {
+          out.set(piece.subarray(0, need), offset);
+          this._buf[0] = piece.subarray(need);
+          this._bufLen -= need; offset += need;
+        }
+      }
+      let sum = 0;
+      for (let i = 0; i < out.length; i++) sum += out[i] * out[i];
+      this.port.postMessage({ pcm: out.buffer, rms: Math.sqrt(sum / out.length) }, [out.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-processor', PCMProcessor);
+`;
+
+    let workletUrl = null;
+    let audioCtx = null;
+    let workletNode = null;
+    let sourceNode = null;
+    let micStream = null;
+    let ws = null;
+    let activeCallback = null;  // { onSegment, onStop } for the current owner
+    const clientId = Math.random().toString(36).slice(2, 10);
+
+    function getWorkletUrl() {
+        if (!workletUrl) {
+            const blob = new Blob([WORKLET_SRC], { type: 'application/javascript' });
+            workletUrl = URL.createObjectURL(blob);
+        }
+        return workletUrl;
+    }
+
+    function teardownAudio() {
+        if (workletNode) { workletNode.disconnect(); workletNode = null; }
+        if (sourceNode) { sourceNode.disconnect(); sourceNode = null; }
+        if (audioCtx) { audioCtx.close(); audioCtx = null; }
+        if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    }
+
+    function teardownWs() {
+        if (ws) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ uid: clientId, eof: 1 }));
+            }
+            ws.close();
+            ws = null;
+        }
+    }
+
+    /**
+     * Start dictating into a txtnote entity.
+     * @param {object} opts
+     * @param {string}   [opts.model]    - whisper model name
+     * @param {string}   [opts.language] - ISO language code or null for auto
+     * @param {function} opts.onSegment  - called with (text, isPartial)
+     * @param {function} opts.onStop     - called when recording stops for any reason
+     */
+    async function start({ model = 'small', language = null, onSegment, onStop }) {
+        // Stop any previous session first
+        await stop();
+
+        activeCallback = { onSegment, onStop };
+
+        // 1. WebSocket
+        await new Promise((resolve, reject) => {
+            const socket = new WebSocket(whisperServerUrl);
+            socket.binaryType = 'arraybuffer';
+            socket.onopen = () => {
+                socket.send(JSON.stringify({
+                    uid: clientId,
+                    language: language || null,
+                    task: 'transcribe',
+                    model,
+                    use_vad: true,
+                    audio_format: 'float32',
+                }));
+                resolve();
+            };
+            socket.onerror = (e) => reject(new Error('WebSocket error'));
+            socket.onclose = () => {
+                if (activeCallback?.onStop) activeCallback.onStop();
+                activeCallback = null;
+            };
+            socket.onmessage = (ev) => {
+                let data;
+                try { data = JSON.parse(ev.data); } catch { return; }
+                if (data.uid !== clientId) return;
+                if (data.message === 'SERVER_READY') return;
+                if (data.status === 'WAIT' || data.status === 'ERROR') {
+                    console.warn('[WhisperDictation] server status:', data.status, data.message);
+                    return;
+                }
+                if (Array.isArray(data.segments) && activeCallback) {
+                    // Concatenate all segment texts for a flat string
+                    const text = data.segments.map(s => (s.text || s).trim()).filter(Boolean).join(' ');
+                    const isPartial = !data.completed;
+                    activeCallback.onSegment(text, isPartial);
+                }
+            };
+            ws = socket;
+        });
+
+        // 2. Mic + AudioWorklet
+        micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                channelCount: 1, sampleRate: { ideal: 16000 },
+                echoCancellation: true, noiseSuppression: true,
+            }
+        });
+        audioCtx = new AudioContext({ sampleRate: 16000 });
+        await audioCtx.audioWorklet.addModule(getWorkletUrl());
+        sourceNode = audioCtx.createMediaStreamSource(micStream);
+        workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+        workletNode.port.onmessage = ({ data: { pcm } }) => {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(pcm);
+        };
+        sourceNode.connect(workletNode);
+        // workletNode deliberately not connected to destination (silent capture)
+    }
+
+    async function stop() {
+        teardownWs();
+        teardownAudio();
+        // onStop is fired by ws.onclose; but if ws was never opened, call it manually
+        if (activeCallback) {
+            activeCallback.onStop?.();
+            activeCallback = null;
+        }
+    }
+
+    return { start, stop };
+})();
+
+
 AFRAME.registerComponent('txtnote', {
     schema: {
         id: { type: 'string' },
         title: { type: 'string' },
-        content: { type: 'string', default: "X" },
+        content: { type: 'string', default: "Lorem ipsum dolor sit amet." },
         pos_x: { type: 'number' },
         pos_y: { type: 'number' },
         pos_z: { type: 'number' },
@@ -348,11 +592,15 @@ AFRAME.registerComponent('txtnote', {
 
     init: function () {
         // runs once when the component is attached to an entity
+        this.init = true;
+        this._creating = false;
+
         this.el.setAttribute('mixin', 'txtnote');
 
         this.editBtn = document.createElement('a-entity');
         this.editBtn.setAttribute('mixin', "uiBtnEditMixin");
         this.editBtn.setAttribute('class', "collidable");
+        if (this.data.temporary) this.editBtn.setAttribute('visible', false);
         this.el.appendChild(this.editBtn);
 
         this.deleteBtn = document.createElement('a-entity');
@@ -363,7 +611,57 @@ AFRAME.registerComponent('txtnote', {
         });
         this.el.appendChild(this.deleteBtn);
 
-        this.init = true;
+        // ── Dictation state ──────────────────────────────────────────────
+        this._dictating = false;
+        this._contentBeforeDictation = '';  // snapshot so we can prepend/replace
+
+        this.editBtn.addEventListener('click', () => {
+            if (this._dictating) {
+                this._stopDictation();
+            } else {
+                this._startDictation();
+            }
+        });
+    },
+
+    _startDictation: async function () {
+        this._dictating = true;
+        this._contentBeforeDictation = '';//this.data.content; We decide to overwrite everything.
+
+        // Visual feedback: pulse the edit button red while recording
+        this.editBtn.setAttribute('material', 'color', '#ff4444');
+        this.editBtn.setAttribute('text', 'value', '●');
+
+        try {
+            await WhisperDictation.start({
+                onSegment: (text, isPartial) => {
+                    if (!this._dictating) return;
+                    // Append new transcript after whatever was there before dictation started
+                    const base = this._contentBeforeDictation ? this._contentBeforeDictation + ' ' : '';
+                    // Use setAttribute so A-Frame's update() → text component → API save all fire normally
+                    this.el.setAttribute('txtnote', 'content', base + text);
+                },
+                onStop: () => {
+                    // Called when WS closes (server timeout, network drop, etc.)
+                    this._cleanupDictationUI();
+                },
+            });
+        } catch (err) {
+            console.error('[txtnote] dictation failed to start:', err);
+            this._cleanupDictationUI();
+        }
+    },
+
+    _stopDictation: function () {
+        WhisperDictation.stop();   // triggers onStop → _cleanupDictationUI
+        this._dictating = false;
+    },
+
+    _cleanupDictationUI: function () {
+        this._dictating = false;
+        // Restore edit button appearance
+        this.editBtn.setAttribute('material', 'color', 'green');
+        this.editBtn.setAttribute('text', 'value', 'E');
     },
 
     update: async function (oldData) {
@@ -379,9 +677,7 @@ AFRAME.registerComponent('txtnote', {
             el.setAttribute('txtnote', 'pos_y', elPos.y);
             el.setAttribute('txtnote', 'pos_z', elPos.z);
         }
-        console.log("update ran");
-        // let width = Math.min(data.content.length * .05 + .25, 5);
-        // console.log(width)
+
         el.setAttribute('text', { value: data.content });
         if (this.init && data.anchored) {
             el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z });
@@ -404,12 +700,16 @@ AFRAME.registerComponent('txtnote', {
         else if (!data.temporary) {
             if (data.id) {
                 noteService.updateTextNote(data.id, AFRAME.utils.diff(oldData, data));
-            } else {
+            } else if (!this._creating) {
+                this._creating = true;
                 try {
                     const newnote = await noteService.createTextNote(data);
                     this.el.setAttribute('txtnote', 'id', newnote.id);
+                    this.editBtn.object3D.visible = true;
                 } catch (err) {
                     console.error('Failed to create text note:', err);
+                } finally {
+                    this._creating = false;
                 }
             }
         }
@@ -420,9 +720,9 @@ AFRAME.registerComponent('txtnote', {
     },
 
     remove: function () {
-        if (this.data.id) {
-            noteService.deleteNote(this.data.id);
-        }
+        // cleanup when component is removed
+        if (this._dictating) this._stopDictation();
+        if (this.data.id) noteService.deleteNote(this.data.id);
     }
 });
 
@@ -437,36 +737,104 @@ AFRAME.registerComponent('imgnote', {
         rot_x: { type: 'number' },
         rot_y: { type: 'number' },
         rot_z: { type: 'number' },
-        anchored: { type: 'boolean' },
-        qrcode_id: { type: 'string' }
+        anchored: { type: 'boolean', default: true },
+        qrcode_id: { type: 'string' },
+        temporary: { type: 'boolean', default: false }
     },
 
-    init: function () {
+    init: async function () {
         // runs once when the component is attached to an entity
         this.init = true;
+        this._creating = false;
+        this.file = null;
+
+        this.editBtn = document.createElement('a-entity');
+        this.editBtn.setAttribute('mixin', "uiBtnEditMixin");
+        this.editBtn.setAttribute('class', "collidable");
+        if (this.data.temporary) this.editBtn.setAttribute('visible', false);
+        this.el.appendChild(this.editBtn);
+
+        this.deleteBtn = document.createElement('a-entity');
+        this.deleteBtn.setAttribute('mixin', "uiBtnDeleteMixin");
+        this.deleteBtn.setAttribute('class', "collidable");
+        this.deleteBtn.addEventListener('click', (event) => {
+            this.el.parentNode.removeChild(this.el);
+        });
+        this.el.appendChild(this.deleteBtn);
+
+        this.editBtn.addEventListener('click', async () => {
+            this.file = await this.promptImageFile();
+            this.update(this.data);
+        });
     },
 
-    update: function (oldData) {
+    promptImageFile: function () {
+        return new Promise((resolve, reject) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+
+            input.onchange = () => {
+                const file = input.files[0];
+                if (!file) return reject(new Error('No file selected'));
+                resolve(file);
+            };
+
+            input.click();
+        });
+    },
+
+    update: async function (oldData) {
         // runs when schema properties change at runtime
         const el = this.el;
         const data = this.data;
 
-        el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        if (this.init) {
+            el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        } else {
+            const elPos = el.getAttribute('position');
+            el.setAttribute('imgnote', 'pos_x', elPos.x);
+            el.setAttribute('imgnote', 'pos_y', elPos.y);
+            el.setAttribute('imgnote', 'pos_z', elPos.z);
+        }
+
         el.setAttribute('src', data.image);
+        if (this.init && data.anchored) {
+            el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z });
+        } else {
+            const elRot = el.getAttribute('rotation');
+            el.setAttribute('imgnote', 'rot_x', elRot.x);
+            el.setAttribute('imgnote', 'rot_y', elRot.y);
+            el.setAttribute('imgnote', 'rot_z', elRot.z);
+        }
         if (!data.anchored) {
             el.setAttribute('look-at', '#camera');
         }
         else {
             el.removeAttribute('look-at');
-            el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z })
         }
 
         if (this.init) {
             this.init = false;
         }
-        else {
-            // TODO
-            //noteService.updateImageNote(data.id, AFRAME.utils.diff(oldData, data));
+        else if (!data.temporary) {
+            if (data.id) {
+                noteService.updateImageNote(data.id, AFRAME.utils.diff(oldData, data), this.file);
+                this.file = null;
+            } else if (!this._creating) {
+                this._creating = true;
+                try {
+                    const file = await this.promptImageFile();
+                    const newnote = await noteService.createImageNote(file, data);
+                    this.el.setAttribute('imgnote', 'id', newnote.id);
+                    this.el.setAttribute('imgnote', 'image', newnote.image);
+                    this.editBtn.object3D.visible = true;
+                } catch (err) {
+                    console.error('Failed to create image note:', err);
+                } finally {
+                    this._creating = false;
+                }
+            }
         }
     },
 
@@ -476,7 +844,7 @@ AFRAME.registerComponent('imgnote', {
 
     remove: function () {
         // cleanup when component is removed
-        noteService.deleteNote(this.data.id);
+        if (this.data.id) noteService.deleteNote(this.data.id);
     }
 });
 
@@ -573,15 +941,25 @@ AFRAME.registerComponent('arrnote', {
         pos2_x: { type: 'number' },
         pos2_y: { type: 'number' },
         pos2_z: { type: 'number' },
-        qrcode_id: { type: 'string' }
+        qrcode_id: { type: 'string' },
+        temporary: { type: 'boolean', default: false }
     },
 
     init: function () {
         // runs once when the component is attached to an entity
         this.init = true;
+        this._creating = false;
+
+        this.deleteBtn = document.createElement('a-entity');
+        this.deleteBtn.setAttribute('mixin', "uiBtnDeleteMixin");
+        this.deleteBtn.setAttribute('class', "collidable");
+        this.deleteBtn.addEventListener('click', (event) => {
+            this.el.parentNode.removeChild(this.el);
+        });
+        this.el.appendChild(this.deleteBtn);
     },
 
-    update: function (oldData) {
+    update: async function (oldData) {
         // runs when schema properties change at runtime
         const el = this.el;
         const data = this.data;
@@ -605,7 +983,7 @@ AFRAME.registerComponent('arrnote', {
 
     remove: function () {
         // cleanup when component is removed
-        noteService.deleteNote(this.data.id);
+        if (this.data.id) noteService.deleteNote(this.data.id);
     }
 });
 
@@ -636,6 +1014,228 @@ AFRAME.registerComponent('change-color-on-click', {
 
             // Change the target entity's color attribute
             el.setAttribute('material', 'color', randomColor);
+        });
+    }
+});
+
+
+AFRAME.registerComponent('custom-ar-hit-test', {
+    schema: {
+        target: { type: 'selector' },
+        mode: { default: 'viewer', oneOf: ['viewer', 'hand'] },
+        enabled: { default: true }
+    },
+
+    init: function () {
+        this.hitTestSource = null;
+        this.transientHitTestSource = null; // separate source for phone tap
+        this.active = false;
+        this.laserEl = null;
+        this._lastPose = null;
+        this._activeSource = null;
+        // Cached reference to the collider-check entity on the right hand.
+        // Both the AR hit-test laser and the A-Frame raycaster share this origin.
+        this._pointerEl = null;
+
+        var self = this;
+        var renderer = this.el.sceneEl.renderer;
+
+        renderer.xr.addEventListener('sessionstart', function () {
+            // Removed is('ar-mode') check — it's false at this point due to async timing
+            self._session = renderer.xr.getSession();
+            self._setupHitTestSource();
+            self._setupLaser();
+            self._session.addEventListener('selectstart', self._onSelectStart.bind(self));
+            self._session.addEventListener('selectend', self._onSelectEnd.bind(self));
+        });
+
+        renderer.xr.addEventListener('sessionend', function () {
+            self.hitTestSource = null;
+            self.transientHitTestSource = null;
+            self.active = false;
+            self._session = null;
+            self._lastPose = null;
+            self._pointerEl = null;
+            if (self.laserEl) {
+                self.laserEl.parentNode.removeChild(self.laserEl);
+                self.laserEl = null;
+            }
+        });
+    },
+
+    _setupHitTestSource: function () {
+        var self = this;
+        var session = this._session;
+
+        if (this.data.mode === 'viewer') {
+            // Phone: use transient input hit-test so the ray follows the tap point,
+            // not the screen center. This mirrors exactly what A-Frame's original does.
+            session.requestHitTestSourceForTransientInput({ profile: 'generic-touchscreen' })
+                .then(function (src) {
+                    self.transientHitTestSource = src;
+                    console.log('custom-ar-hit-test: transient source ready');
+                })
+                .catch(function (e) { console.warn('transient hit-test source failed:', e); });
+
+        } else {
+            // ML2 hand: stable hardware-fused ray from the RIGHT hand's targetRaySpace
+            var onSourcesChange = function () {
+                var sources = session.inputSources;
+                for (var i = 0; i < sources.length; i++) {
+                    if (sources[i].hand && sources[i].handedness === 'right') {
+                        session.requestHitTestSource({ space: sources[i].targetRaySpace })
+                            .then(function (src) {
+                                self.hitTestSource = src;
+                                console.log('custom-ar-hit-test: right hand source ready');
+                            })
+                            .catch(function (e) { console.warn('hand hit-test source failed:', e); });
+                        session.removeEventListener('inputsourceschange', onSourcesChange);
+                        return;
+                    }
+                }
+            };
+            session.addEventListener('inputsourceschange', onSourcesChange);
+            onSourcesChange();
+        }
+    },
+
+    _setupLaser: function () {
+        if (this.data.mode !== 'hand') return;
+        // Cache the pointer entity once — same origin used by the A-Frame raycaster
+        this._pointerEl = document.querySelector('#rightHand [collider-check]');
+        this.laserEl = document.createElement('a-cylinder');
+        this.laserEl.setAttribute('radius', '0.003');
+        this.laserEl.setAttribute('height', '1');
+        this.laserEl.setAttribute('segments-height', '1');
+        this.laserEl.setAttribute('segments-radial', '6');
+        this.laserEl.setAttribute('material', 'color: #a29bfe; emissive: #a29bfe; emissiveIntensity: 1; opacity: 0.8; transparent: true; depthWrite: false');
+        this.laserEl.setAttribute('visible', 'false');
+        this.el.sceneEl.appendChild(this.laserEl);
+    },
+
+    _onSelectStart: function (e) {
+        if (!this.data.enabled) return;
+        var src = e.inputSource;
+        if (this.data.mode === 'viewer') {
+            if (src.targetRayMode !== 'transient-pointer' && src.targetRayMode !== 'screen') return;
+        } else {
+            if (!src.hand || src.handedness !== 'right') return;
+        }
+        this.active = true;
+        this._activeSource = src;
+    },
+
+    _onSelectEnd: function (e) {
+        if (!this.active) return;
+        var src = e.inputSource;
+        if (this.data.mode === 'viewer') {
+            if (src.targetRayMode !== 'transient-pointer' && src.targetRayMode !== 'screen') return;
+        } else {
+            if (!src.hand || src.handedness !== 'right') return;
+        }
+        if (this._lastPose && this.data.target) {
+            var obj = this.data.target.object3D;
+            obj.position.copy(this._lastPose.transform.position);
+            obj.quaternion.copy(this._lastPose.transform.orientation);
+            obj.visible = true;
+            this.el.sceneEl.emit('ar-hit-test-select', {
+                position: this._lastPose.transform.position,
+                orientation: this._lastPose.transform.orientation
+            });
+        }
+
+        this.active = false;
+        this._activeSource = null;
+    },
+
+    tick: function () {
+        if (!this.data.enabled) return;
+        var frame = this.el.sceneEl.frame;
+        if (!frame) return;
+
+        var renderer = this.el.sceneEl.renderer;
+        var refSpace = renderer.xr.getReferenceSpace();
+
+        if (this.data.mode === 'viewer') {
+            // Transient: results only exist during an active touch
+            if (!this.transientHitTestSource) return;
+            var transientResults = frame.getHitTestResultsForTransientInput(this.transientHitTestSource);
+            if (transientResults.length > 0 && transientResults[0].results.length > 0) {
+                this._lastPose = transientResults[0].results[0].getPose(refSpace);
+            }
+            // Note: _lastPose intentionally kept from last frame so selectend can use it
+            // even after the touch lifts and transient results disappear.
+
+        } else {
+            // Hand: continuous ray, always updating
+            if (!this.hitTestSource) return;
+            var results = frame.getHitTestResults(this.hitTestSource);
+            if (results.length === 0) {
+                if (this.laserEl) this.laserEl.setAttribute('visible', 'false');
+                return;
+            }
+            this._lastPose = results[0].getPose(refSpace);
+            if (!this._lastPose) return;
+
+            // Move cursor to hit point
+            if (this.data.target) {
+                var obj = this.data.target.object3D;
+                obj.position.copy(this._lastPose.transform.position);
+                obj.quaternion.copy(this._lastPose.transform.orientation);
+            }
+
+            // Update laser from hand to hit point.
+            // Re-use the collider-check entity's world transform so both raycasts
+            // share exactly the same origin/direction — no second inputSources loop.
+            if (this.laserEl && this._pointerEl) {
+                var origin = new THREE.Vector3();
+                this._pointerEl.object3D.getWorldPosition(origin);
+                var hitPt = new THREE.Vector3().copy(this._lastPose.transform.position);
+                var dist = origin.distanceTo(hitPt);
+                var dir = hitPt.clone().sub(origin).normalize();
+                var quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                this.laserEl.object3D.position.copy(origin.clone().lerp(hitPt, 0.5));
+                this.laserEl.object3D.quaternion.copy(quat);
+                this.laserEl.object3D.scale.set(1, dist, 1);
+                this.laserEl.setAttribute('visible', 'true');
+            }
+        }
+    },
+
+    remove: function () {
+        if (this.hitTestSource) this.hitTestSource.cancel();
+        if (this.transientHitTestSource) this.transientHitTestSource.cancel();
+        if (this.laserEl && this.laserEl.parentNode) {
+            this.laserEl.parentNode.removeChild(this.laserEl);
+        }
+    }
+});
+
+// DEBUG: log every XR session event to see what's actually firing
+AFRAME.registerComponent('xr-debug', {
+    init: function () {
+        var sceneEl = this.el.sceneEl || this.el;
+        var renderer = sceneEl.renderer;
+
+        sceneEl.addEventListener('enter-vr', function () {
+            console.log('[xr-debug] enter-vr fired');
+        });
+
+        renderer.xr.addEventListener('sessionstart', function () {
+            console.log('[xr-debug] sessionstart fired, isAR:', sceneEl.is('ar-mode'));
+            var session = renderer.xr.getSession();
+            console.log('[xr-debug] session:', session);
+            console.log('[xr-debug] requestHitTestSourceForTransientInput available:',
+                typeof session.requestHitTestSourceForTransientInput);
+            console.log('[xr-debug] requestHitTestSource available:',
+                typeof session.requestHitTestSource);
+
+            session.addEventListener('selectstart', function (e) {
+                console.log('[xr-debug] selectstart:', e.inputSource.targetRayMode, e.inputSource.profiles);
+            });
+            session.addEventListener('selectend', function (e) {
+                console.log('[xr-debug] selectend:', e.inputSource.targetRayMode);
+            });
         });
     }
 });
