@@ -102,6 +102,33 @@ class NoteService {
     }
 
     /**
+     * Update an existing Image Note
+     * Maps to: PUT /api/notes/notes/image/{note_id}
+     * Sends multipart/form-data with a JSON `payload` field (ImageNoteUpdateIn)
+     * and an optional `file` to replace the image.
+     */
+    async updateImageNote(noteId, payload, file = null) {
+        try {
+            const formData = new FormData();
+            formData.append('payload', JSON.stringify(payload));
+            if (file) {
+                formData.append('file', file);
+            }
+
+            const response = await fetch(`${this.baseUrl}/notes/image/${noteId}`, {
+                method: 'PUT',
+                headers: this._getHeaders(true), // omit Content-Type so browser sets boundary
+                body: formData
+            });
+            if (!response.ok) throw new Error(`Failed to update image note: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            console.error(`Error updating image note ${noteId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Create an Arrow Note
      * Maps to: POST /api/notes/notes/arrow
      * payload format: { qrcode_id, content, title, pos_x, pos_y, pos_z, ... }
@@ -258,6 +285,7 @@ AFRAME.registerComponent('qr-space-controller', {
             location.reload();
         })
 
+
         const newTxtNoteBtnEL = document.querySelector("#newTxtNoteBtn");
 
         newTxtNoteBtnEL.addEventListener("click", (event) => {
@@ -281,6 +309,32 @@ AFRAME.registerComponent('qr-space-controller', {
 
             uiTxtEl.object3D.visible = true;
         })
+
+
+        const newImgNoteBtnEL = document.querySelector("#newImgNoteBtn");
+
+        newImgNoteBtnEL.addEventListener("click", (event) => {
+            const el = document.createElement('a-image');
+            el.setAttribute('visible', false);
+            el.setAttribute('imgnote', { qrcode_id: this.currentQrId, temporary: true });
+            this.notesEl.appendChild(el);
+
+            validateBtnEl.addEventListener("click", (event) => {
+                this.elToMove = false;
+                uiTxtEl.object3D.visible = false;
+                validateBtnEl.object3D.visible = false;
+                coordinatesMarkerEl.object3D.visible = false;
+                newImgNoteBtnEL.emit('mouseleave', {}, false);
+                el.setAttribute('imgnote', 'temporary', false);
+            }, { once: true });
+
+            uiTxtEl.setAttribute('value', "Cliquez sur l'emplacement voulu");
+
+            this.elToMove = el;
+
+            uiTxtEl.object3D.visible = true;
+        })
+
 
         if (!this.currentQrId) {
             console.error("No QRCode id was passed !");
@@ -513,11 +567,15 @@ AFRAME.registerComponent('txtnote', {
 
     init: function () {
         // runs once when the component is attached to an entity
+        this.init = true;
+        this._creating = false;
+
         this.el.setAttribute('mixin', 'txtnote');
 
         this.editBtn = document.createElement('a-entity');
         this.editBtn.setAttribute('mixin', "uiBtnEditMixin");
         this.editBtn.setAttribute('class', "collidable");
+        if (this.data.temporary) this.editBtn.setAttribute('visible', false);
         this.el.appendChild(this.editBtn);
 
         this.deleteBtn = document.createElement('a-entity');
@@ -539,9 +597,6 @@ AFRAME.registerComponent('txtnote', {
                 this._startDictation();
             }
         });
-
-        this.init = true;
-        this._creating = false;
     },
 
     _startDictation: async function () {
@@ -584,10 +639,6 @@ AFRAME.registerComponent('txtnote', {
         this.editBtn.setAttribute('text', 'value', 'E');
     },
 
-    remove: function () {
-        if (this._dictating) this._stopDictation();
-    },
-
     update: async function (oldData) {
         // runs when schema properties change at runtime
         const el = this.el;
@@ -601,8 +652,7 @@ AFRAME.registerComponent('txtnote', {
             el.setAttribute('txtnote', 'pos_y', elPos.y);
             el.setAttribute('txtnote', 'pos_z', elPos.z);
         }
-        // let width = Math.min(data.content.length * .05 + .25, 5);
-        // console.log(width)
+
         el.setAttribute('text', { value: data.content });
         if (this.init && data.anchored) {
             el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z });
@@ -630,6 +680,7 @@ AFRAME.registerComponent('txtnote', {
                 try {
                     const newnote = await noteService.createTextNote(data);
                     this.el.setAttribute('txtnote', 'id', newnote.id);
+                    this.editBtn.object3D.visible = true;
                 } catch (err) {
                     console.error('Failed to create text note:', err);
                 } finally {
@@ -644,9 +695,9 @@ AFRAME.registerComponent('txtnote', {
     },
 
     remove: function () {
-        if (this.data.id) {
-            noteService.deleteNote(this.data.id);
-        }
+        // cleanup when component is removed
+        if (this._dictating) this._stopDictation();
+        if (this.data.id) noteService.deleteNote(this.data.id);
     }
 });
 
@@ -662,35 +713,103 @@ AFRAME.registerComponent('imgnote', {
         rot_y: { type: 'number' },
         rot_z: { type: 'number' },
         anchored: { type: 'boolean' },
-        qrcode_id: { type: 'string' }
+        qrcode_id: { type: 'string' },
+        temporary: { type: 'boolean', default: false }
     },
 
-    init: function () {
+    init: async function () {
         // runs once when the component is attached to an entity
         this.init = true;
+        this._creating = false;
+        this.file = null;
+
+        this.editBtn = document.createElement('a-entity');
+        this.editBtn.setAttribute('mixin', "uiBtnEditMixin");
+        this.editBtn.setAttribute('class', "collidable");
+        if (this.data.temporary) this.editBtn.setAttribute('visible', false);
+        this.el.appendChild(this.editBtn);
+
+        this.deleteBtn = document.createElement('a-entity');
+        this.deleteBtn.setAttribute('mixin', "uiBtnDeleteMixin");
+        this.deleteBtn.setAttribute('class', "collidable");
+        this.deleteBtn.addEventListener('click', (event) => {
+            this.el.parentNode.removeChild(this.el);
+        });
+        this.el.appendChild(this.deleteBtn);
+
+        this.editBtn.addEventListener('click', async () => {
+            this.file = await this.promptImageFile();
+            this.update(this.data);
+        });
     },
 
-    update: function (oldData) {
+    promptImageFile: function () {
+        return new Promise((resolve, reject) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+
+            input.onchange = () => {
+                const file = input.files[0];
+                if (!file) return reject(new Error('No file selected'));
+                resolve(file);
+            };
+
+            input.click();
+        });
+    },
+
+    update: async function (oldData) {
         // runs when schema properties change at runtime
         const el = this.el;
         const data = this.data;
 
-        el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        if (this.init) {
+            el.setAttribute('position', { x: data.pos_x, y: data.pos_y, z: data.pos_z });
+        } else {
+            const elPos = el.getAttribute('position');
+            el.setAttribute('imgnote', 'pos_x', elPos.x);
+            el.setAttribute('imgnote', 'pos_y', elPos.y);
+            el.setAttribute('imgnote', 'pos_z', elPos.z);
+        }
+
         el.setAttribute('src', data.image);
+        if (this.init && data.anchored) {
+            el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z });
+        } else {
+            const elRot = el.getAttribute('rotation');
+            el.setAttribute('imgnote', 'rot_x', elRot.x);
+            el.setAttribute('imgnote', 'rot_y', elRot.y);
+            el.setAttribute('imgnote', 'rot_z', elRot.z);
+        }
         if (!data.anchored) {
             el.setAttribute('look-at', '#camera');
         }
         else {
             el.removeAttribute('look-at');
-            el.setAttribute('rotation', { x: data.rot_x, y: data.rot_y, z: data.rot_z })
         }
 
         if (this.init) {
             this.init = false;
         }
-        else {
-            // TODO
-            //noteService.updateImageNote(data.id, AFRAME.utils.diff(oldData, data));
+        else if (!data.temporary) {
+            if (data.id) {
+                noteService.updateImageNote(data.id, AFRAME.utils.diff(oldData, data), this.file);
+                this.file = null;
+            } else if (!this._creating) {
+                this._creating = true;
+                try {
+                    const file = await this.promptImageFile();
+                    const newnote = await noteService.createImageNote(file, data);
+                    this.el.setAttribute('imgnote', 'id', newnote.id);
+                    this.el.setAttribute('imgnote', 'image', newnote.image);
+                    this.editBtn.object3D.visible = true;
+                } catch (err) {
+                    console.error('Failed to create image note:', err);
+                } finally {
+                    this._creating = false;
+                }
+            }
         }
     },
 
@@ -700,7 +819,7 @@ AFRAME.registerComponent('imgnote', {
 
     remove: function () {
         // cleanup when component is removed
-        noteService.deleteNote(this.data.id);
+        if (this.data.id) noteService.deleteNote(this.data.id);
     }
 });
 
@@ -879,6 +998,9 @@ AFRAME.registerComponent('custom-ar-hit-test', {
         this.laserEl = null;
         this._lastPose = null;
         this._activeSource = null;
+        // Cached reference to the collider-check entity on the right hand.
+        // Both the AR hit-test laser and the A-Frame raycaster share this origin.
+        this._pointerEl = null;
 
         var self = this;
         var renderer = this.el.sceneEl.renderer;
@@ -898,6 +1020,7 @@ AFRAME.registerComponent('custom-ar-hit-test', {
             self.active = false;
             self._session = null;
             self._lastPose = null;
+            self._pointerEl = null;
             if (self.laserEl) {
                 self.laserEl.parentNode.removeChild(self.laserEl);
                 self.laserEl = null;
@@ -920,15 +1043,15 @@ AFRAME.registerComponent('custom-ar-hit-test', {
                 .catch(function (e) { console.warn('transient hit-test source failed:', e); });
 
         } else {
-            // ML2 hand: stable hardware-fused ray from the hand's targetRaySpace
+            // ML2 hand: stable hardware-fused ray from the RIGHT hand's targetRaySpace
             var onSourcesChange = function () {
                 var sources = session.inputSources;
                 for (var i = 0; i < sources.length; i++) {
-                    if (sources[i].hand) {
+                    if (sources[i].hand && sources[i].handedness === 'right') {
                         session.requestHitTestSource({ space: sources[i].targetRaySpace })
                             .then(function (src) {
                                 self.hitTestSource = src;
-                                console.log('custom-ar-hit-test: hand source ready');
+                                console.log('custom-ar-hit-test: right hand source ready');
                             })
                             .catch(function (e) { console.warn('hand hit-test source failed:', e); });
                         session.removeEventListener('inputsourceschange', onSourcesChange);
@@ -943,6 +1066,8 @@ AFRAME.registerComponent('custom-ar-hit-test', {
 
     _setupLaser: function () {
         if (this.data.mode !== 'hand') return;
+        // Cache the pointer entity once — same origin used by the A-Frame raycaster
+        this._pointerEl = document.querySelector('#rightHand [collider-check]');
         this.laserEl = document.createElement('a-cylinder');
         this.laserEl.setAttribute('radius', '0.003');
         this.laserEl.setAttribute('height', '1');
@@ -959,7 +1084,7 @@ AFRAME.registerComponent('custom-ar-hit-test', {
         if (this.data.mode === 'viewer') {
             if (src.targetRayMode !== 'transient-pointer' && src.targetRayMode !== 'screen') return;
         } else {
-            if (!src.hand) return;
+            if (!src.hand || src.handedness !== 'right') return;
         }
         this.active = true;
         this._activeSource = src;
@@ -967,13 +1092,11 @@ AFRAME.registerComponent('custom-ar-hit-test', {
 
     _onSelectEnd: function (e) {
         if (!this.active) return;
-        // For transient/screen inputs the inputSource reference may differ between
-        // selectstart and selectend, so only check mode rather than object identity
         var src = e.inputSource;
         if (this.data.mode === 'viewer') {
             if (src.targetRayMode !== 'transient-pointer' && src.targetRayMode !== 'screen') return;
         } else {
-            if (!src.hand) return;
+            if (!src.hand || src.handedness !== 'right') return;
         }
         if (this._lastPose && this.data.target) {
             var obj = this.data.target.object3D;
@@ -1026,26 +1149,20 @@ AFRAME.registerComponent('custom-ar-hit-test', {
                 obj.quaternion.copy(this._lastPose.transform.orientation);
             }
 
-            // Update laser from hand to hit point
-            if (this.laserEl) {
-                var session = renderer.xr.getSession();
-                if (!session) return;
-                var sources = session.inputSources;
-                for (var i = 0; i < sources.length; i++) {
-                    if (!sources[i].hand) continue;
-                    var handPose = frame.getPose(sources[i].targetRaySpace, refSpace);
-                    if (!handPose) continue;
-                    var origin = new THREE.Vector3().copy(handPose.transform.position);
-                    var hitPt = new THREE.Vector3().copy(this._lastPose.transform.position);
-                    var dist = origin.distanceTo(hitPt);
-                    var dir = hitPt.clone().sub(origin).normalize();
-                    var quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-                    this.laserEl.object3D.position.copy(origin.clone().lerp(hitPt, 0.5));
-                    this.laserEl.object3D.quaternion.copy(quat);
-                    this.laserEl.object3D.scale.set(1, dist, 1);  // scale instead of setAttribute for perf
-                    this.laserEl.setAttribute('visible', 'true');
-                    break;
-                }
+            // Update laser from hand to hit point.
+            // Re-use the collider-check entity's world transform so both raycasts
+            // share exactly the same origin/direction — no second inputSources loop.
+            if (this.laserEl && this._pointerEl) {
+                var origin = new THREE.Vector3();
+                this._pointerEl.object3D.getWorldPosition(origin);
+                var hitPt = new THREE.Vector3().copy(this._lastPose.transform.position);
+                var dist = origin.distanceTo(hitPt);
+                var dir = hitPt.clone().sub(origin).normalize();
+                var quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                this.laserEl.object3D.position.copy(origin.clone().lerp(hitPt, 0.5));
+                this.laserEl.object3D.quaternion.copy(quat);
+                this.laserEl.object3D.scale.set(1, dist, 1);
+                this.laserEl.setAttribute('visible', 'true');
             }
         }
     },

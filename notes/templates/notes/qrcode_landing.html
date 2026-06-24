@@ -158,7 +158,7 @@
                event-set__mouseenter="material.color: green"
                event-set__click="material.color: blue"
                event-set__mouseleave="material.color: green"
-               position=".05 -.1 0"
+               position=".05 -.1 .01"
                {% if not edit %}visible="false"{% endif %}>
       </a-mixin>
       <a-mixin id="uiBtnDeleteMixin"
@@ -168,7 +168,7 @@
                event-set__mouseenter="material.color: red"
                event-set__click="material.color: blue"
                event-set__mouseleave="material.color: red"
-               position="-.05 -.1 0"
+               position="-.05 -.1 .01"
                {% if not edit %}visible="false"{% endif %}>
       </a-mixin>
     </a-assets>
@@ -229,6 +229,7 @@
       </a-sphere>
     </a-entity>
     <a-entity qr-space-controller="qrid: {{ qrcode.id }}"
+              anchored
               position="0 0 -2"
               visible="false">
       <a-entity id="qrUi" visible="false">
