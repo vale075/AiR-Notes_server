@@ -336,6 +336,31 @@ AFRAME.registerComponent('qr-space-controller', {
         })
 
 
+        const newArrNoteBtnEL = document.querySelector("#newArrNoteBtn");
+
+        newArrNoteBtnEL.addEventListener("click", (event) => {
+            const el = document.createElement('a-entity');
+            el.setAttribute('visible', false);
+            el.setAttribute('arrnote', { qrcode_id: this.currentQrId, temporary: true });
+            this.notesEl.appendChild(el);
+
+            validateBtnEl.addEventListener("click", (event) => {
+                this.elToMove = false;
+                uiTxtEl.object3D.visible = false;
+                validateBtnEl.object3D.visible = false;
+                coordinatesMarkerEl.object3D.visible = false;
+                newArrNoteBtnEL.emit('mouseleave', {}, false);
+                el.setAttribute('arrnote', 'temporary', false);
+            }, { once: true });
+
+            uiTxtEl.setAttribute('value', "Cliquez sur l'emplacement voulu pour le premier point");
+
+            this.elToMove = el;
+
+            uiTxtEl.object3D.visible = true;
+        })
+
+
         if (!this.currentQrId) {
             console.error("No QRCode id was passed !");
             throw error;
@@ -712,7 +737,7 @@ AFRAME.registerComponent('imgnote', {
         rot_x: { type: 'number' },
         rot_y: { type: 'number' },
         rot_z: { type: 'number' },
-        anchored: { type: 'boolean' },
+        anchored: { type: 'boolean', default: true },
         qrcode_id: { type: 'string' },
         temporary: { type: 'boolean', default: false }
     },
@@ -916,15 +941,25 @@ AFRAME.registerComponent('arrnote', {
         pos2_x: { type: 'number' },
         pos2_y: { type: 'number' },
         pos2_z: { type: 'number' },
-        qrcode_id: { type: 'string' }
+        qrcode_id: { type: 'string' },
+        temporary: { type: 'boolean', default: false }
     },
 
     init: function () {
         // runs once when the component is attached to an entity
         this.init = true;
+        this._creating = false;
+
+        this.deleteBtn = document.createElement('a-entity');
+        this.deleteBtn.setAttribute('mixin', "uiBtnDeleteMixin");
+        this.deleteBtn.setAttribute('class', "collidable");
+        this.deleteBtn.addEventListener('click', (event) => {
+            this.el.parentNode.removeChild(this.el);
+        });
+        this.el.appendChild(this.deleteBtn);
     },
 
-    update: function (oldData) {
+    update: async function (oldData) {
         // runs when schema properties change at runtime
         const el = this.el;
         const data = this.data;
@@ -948,7 +983,7 @@ AFRAME.registerComponent('arrnote', {
 
     remove: function () {
         // cleanup when component is removed
-        noteService.deleteNote(this.data.id);
+        if (this.data.id) noteService.deleteNote(this.data.id);
     }
 });
 
