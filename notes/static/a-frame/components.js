@@ -250,7 +250,7 @@ AFRAME.registerComponent('qr-space-controller', {
                 tempUp.copy(awayFromCamera.normalize());
             }
 
-            // 4-7. Build the orthonormal basis — unchanged, this part was already correct
+            // 4-7. Build the orthonormal basis
             xAxis.crossVectors(tempUp, surfaceNormal).normalize();
             yAxis.crossVectors(surfaceNormal, xAxis).normalize();
             rotationMatrix.makeBasis(xAxis, yAxis, surfaceNormal);
@@ -1041,7 +1041,6 @@ AFRAME.registerComponent('custom-ar-hit-test', {
         var renderer = this.el.sceneEl.renderer;
 
         renderer.xr.addEventListener('sessionstart', function () {
-            // Removed is('ar-mode') check — it's false at this point due to async timing
             self._session = renderer.xr.getSession();
             self._setupHitTestSource();
             self._setupLaser();

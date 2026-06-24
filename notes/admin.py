@@ -6,7 +6,7 @@ from .models import ArrowNote, ImageNote, QRCode, TextNote
 
 
 # --- INLINES ---
-# This allows you to view and edit notes directly inside the QRCode admin page.
+# Allows to view and edit notes directly inside the QRCode admin page.
 class TextNoteInline(admin.StackedInline):
     model = TextNote
     extra = 0

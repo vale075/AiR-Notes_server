@@ -27,7 +27,7 @@ from .api import api
 admin.site.site_header = "AiR Notes Administration"
 admin.site.site_title = "AiR Notes Admin Portal"
 
-# This changes the sub-title on the main admin dashboard page
+# Changes the sub-title on the main admin dashboard page
 admin.site.index_title = format_html(
     "Bienvenue sur le panneau de contrôle. 🚀 "
     '<a href="/api/docs" target="_blank" style="margin-left: 15px; text-decoration: underline; color: #79aec8;">Voir '
